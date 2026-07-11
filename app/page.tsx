@@ -1,4 +1,5 @@
 import { Montserrat } from "next/font/google";
+import Link from "next/link";
 
 const montserrat = Montserrat({
   subsets: ["latin"],
@@ -31,9 +32,12 @@ export default function Home() {
 
           <div className="mt-10 h-px w-32 bg-gradient-to-r from-transparent via-white/80 to-transparent" />
 
-          <p className="mt-8 text-sm uppercase tracking-[0.3em] text-slate-900/60">
-            Coming Soon
-          </p>
+          <Link
+            href="/login"
+            className="mt-8 inline-flex h-11 items-center justify-center rounded-full bg-white px-8 text-sm font-semibold uppercase tracking-[0.18em] text-[#0f3b5a] shadow-md shadow-sky-500/25 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/90 focus-visible:ring-offset-2 focus-visible:ring-offset-[#38B6FF]"
+          >
+            Login
+          </Link>
         </div>
       </section>
     </main>
