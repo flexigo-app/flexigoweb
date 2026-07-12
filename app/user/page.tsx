@@ -6,6 +6,13 @@ import { Montserrat } from "next/font/google";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import {
+  bookingSummaryStorageKey,
+  type BookingSummary,
+  type TripMode,
+  type VehicleType,
+  readBookingSummaryFromStorage,
+} from "@/lib/booking-summary";
 
 const montserrat = Montserrat({
   subsets: ["latin"],
@@ -13,9 +20,15 @@ const montserrat = Montserrat({
   style: ["italic"],
 });
 
-type TripMode = "pickup" | "drop";
 type FieldKind = "airport" | "address";
-type VehicleType = "sedan" | "suv";
+type BookingErrorState = {
+  topField?: string;
+  secondField?: string;
+  selectedDate?: string;
+  selectedTime?: string;
+  selectedPassengerCount?: string;
+  selectedVehicleType?: string;
+};
 
 type GooglePlacesAutocompletePlace = {
   formatted_address?: string;
@@ -86,31 +99,76 @@ const getTomorrowDateValue = () => {
   return `${year}-${month}-${day}`;
 };
 
+const getBookingDefaultsFromSummary = (summary: BookingSummary | null) => {
+  if (!summary) return null;
+
+  return {
+    tripMode: summary.tripMode,
+    pickupAirport: summary.pickupAirport,
+    dropAirport: summary.dropAirport,
+    pickupAddress: summary.pickupAddress,
+    dropAddress: summary.dropAddress,
+    selectedPassengerCount: summary.passengerCount,
+    selectedVehicleType: summary.vehicleType,
+    selectedDate: summary.date,
+    selectedTime: summary.time,
+    selectedMeridiem: summary.meridiem,
+  };
+};
+
 export default function UserPage() {
   const router = useRouter();
   const { data: sessionData, isPending } = authClient.useSession();
+  const storedBookingSummary = useMemo(() => readBookingSummaryFromStorage(), []);
+  const bookingDefaults = useMemo(
+    () => getBookingDefaultsFromSummary(storedBookingSummary),
+    [storedBookingSummary]
+  );
 
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [tripMode, setTripMode] = useState<TripMode>("pickup");
+  const [tripMode, setTripMode] = useState<TripMode>(bookingDefaults?.tripMode ?? "pickup");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isGreetingCompact, setIsGreetingCompact] = useState(false);
   const [isAirportMenuOpen, setIsAirportMenuOpen] = useState(false);
   const [isPassengerMenuOpen, setIsPassengerMenuOpen] = useState(false);
   const [isPlacesScriptLoaded, setIsPlacesScriptLoaded] = useState(false);
-  const [pickupAirport, setPickupAirport] = useState(airportOptions[0]);
-  const [dropAirport, setDropAirport] = useState(airportOptions[0]);
-  const [selectedPassengerCount, setSelectedPassengerCount] = useState("1");
-  const [selectedVehicleType, setSelectedVehicleType] = useState<VehicleType>("suv");
-  const [selectedDate, setSelectedDate] = useState(getTomorrowDateValue());
-  const [pickupAddress, setPickupAddress] = useState("");
-  const [dropAddress, setDropAddress] = useState("");
+  const [pickupAirport, setPickupAirport] = useState(
+    bookingDefaults?.pickupAirport ?? airportOptions[0]
+  );
+  const [dropAirport, setDropAirport] = useState(
+    bookingDefaults?.dropAirport ?? airportOptions[0]
+  );
+  const [selectedPassengerCount, setSelectedPassengerCount] = useState(
+    bookingDefaults?.selectedPassengerCount ?? "1"
+  );
+  const [selectedVehicleType, setSelectedVehicleType] = useState<VehicleType>(
+    bookingDefaults?.selectedVehicleType ?? "suv"
+  );
+  const [selectedDate, setSelectedDate] = useState(
+    bookingDefaults?.selectedDate ?? getTomorrowDateValue()
+  );
+  const [selectedTime, setSelectedTime] = useState(bookingDefaults?.selectedTime ?? "");
+  const [selectedMeridiem, setSelectedMeridiem] = useState<"AM" | "PM">(
+    bookingDefaults?.selectedMeridiem ?? "AM"
+  );
+  const [pickupAddress, setPickupAddress] = useState(bookingDefaults?.pickupAddress ?? "");
+  const [dropAddress, setDropAddress] = useState(bookingDefaults?.dropAddress ?? "");
+  const [bookingErrors, setBookingErrors] = useState<BookingErrorState>({});
 
   const menuRef = useRef<HTMLDivElement | null>(null);
   const airportPickerRef = useRef<HTMLDivElement | null>(null);
   const passengerPickerRef = useRef<HTMLDivElement | null>(null);
+  const topFieldSectionRef = useRef<HTMLLabelElement | null>(null);
+  const secondFieldSectionRef = useRef<HTMLLabelElement | null>(null);
+  const scheduleSectionRef = useRef<HTMLDivElement | null>(null);
+  const passengerSectionRef = useRef<HTMLLabelElement | null>(null);
+  const vehicleSectionRef = useRef<HTMLDivElement | null>(null);
   const pickupAddressInputRef = useRef<HTMLInputElement | null>(null);
   const dropAddressInputRef = useRef<HTMLInputElement | null>(null);
   const dateInputRef = useRef<HTMLInputElement | null>(null);
+  const timeInputRef = useRef<HTMLInputElement | null>(null);
+  const vehicleCardsRef = useRef<HTMLDivElement | null>(null);
+  const passengerButtonRef = useRef<HTMLButtonElement | null>(null);
   const pickupAutocompleteRef = useRef<GooglePlacesAutocompleteInstance | null>(null);
   const dropAutocompleteRef = useRef<GooglePlacesAutocompleteInstance | null>(null);
   const pickupBoundInputRef = useRef<HTMLInputElement | null>(null);
@@ -273,15 +331,191 @@ export default function UserPage() {
     setTripMode(mode);
     setIsAirportMenuOpen(false);
     setIsPassengerMenuOpen(false);
+    setBookingErrors({});
   };
 
   const handleDateChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSelectedDate(event.target.value);
+    setBookingErrors((currentErrors) => ({
+      ...currentErrors,
+      selectedDate: undefined,
+    }));
 
     // Safari keeps date popovers open until blur in some layouts.
     requestAnimationFrame(() => {
       dateInputRef.current?.blur();
     });
+  };
+
+  const handleTimeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const digitsOnly = event.target.value.replace(/\D/g, "").slice(0, 4);
+    const hourDigits = digitsOnly.slice(0, 2);
+    const minuteDigits = digitsOnly.slice(2, 4);
+
+    let formattedHour = hourDigits;
+    if (hourDigits.length === 2) {
+      const parsedHour = Number.parseInt(hourDigits, 10);
+      if (!Number.isNaN(parsedHour)) {
+        if (parsedHour === 0) {
+          formattedHour = "01";
+        } else if (parsedHour > 12) {
+          formattedHour = "12";
+        }
+      }
+    }
+
+    let formattedMinute = minuteDigits;
+    if (minuteDigits.length === 2) {
+      const parsedMinute = Number.parseInt(minuteDigits, 10);
+      if (!Number.isNaN(parsedMinute) && parsedMinute > 59) {
+        formattedMinute = "59";
+      }
+    }
+
+    const formattedTime =
+      digitsOnly.length <= 2
+        ? formattedHour
+        : `${formattedHour}:${formattedMinute}`;
+
+    setSelectedTime(formattedTime);
+    clearFieldError("selectedTime");
+  };
+
+  const clearFieldError = (fieldName: keyof BookingErrorState) => {
+    setBookingErrors((currentErrors) => ({
+      ...currentErrors,
+      [fieldName]: undefined,
+    }));
+  };
+
+  const scrollAndFocusElement = (
+    targetRef: HTMLElement | null,
+    focusTarget?: HTMLElement | null
+  ) => {
+    const scrollTarget = targetRef ?? focusTarget;
+    if (!scrollTarget) return;
+
+    const headerOffset = 110;
+    const targetTop =
+      scrollTarget.getBoundingClientRect().top + window.scrollY - headerOffset;
+
+    window.scrollTo({
+      top: Math.max(targetTop, 0),
+      behavior: "smooth",
+    });
+
+    const focusElement = focusTarget ?? scrollTarget;
+    window.setTimeout(() => {
+      focusElement.focus({ preventScroll: true });
+    }, 220);
+  };
+
+  const validateBookingForm = () => {
+    const nextErrors: BookingErrorState = {};
+
+    const topFieldValue =
+      topField.type === "airport"
+        ? tripMode === "pickup"
+          ? pickupAirport
+          : dropAirport
+        : tripMode === "pickup"
+          ? pickupAddress
+          : dropAddress;
+
+    const secondFieldValue =
+      secondField.type === "airport"
+        ? tripMode === "pickup"
+          ? dropAirport
+          : pickupAirport
+        : tripMode === "pickup"
+          ? dropAddress
+          : pickupAddress;
+
+    if (!topFieldValue.trim()) {
+      nextErrors.topField = `${topField.label} is required.`;
+    }
+
+    if (!secondFieldValue.trim()) {
+      nextErrors.secondField = `${secondField.label} is required.`;
+    }
+
+    if (!selectedDate) {
+      nextErrors.selectedDate = "Date is required.";
+    }
+
+    if (!selectedTime.trim()) {
+      nextErrors.selectedTime = "Time is required.";
+    }
+
+    if (!selectedPassengerCount) {
+      nextErrors.selectedPassengerCount = "Passenger count is required.";
+    }
+
+    if (!selectedVehicleType) {
+      nextErrors.selectedVehicleType = "Vehicle type is required.";
+    }
+
+    setBookingErrors(nextErrors);
+
+    if (nextErrors.topField) {
+      if (topField.type === "airport") {
+        scrollAndFocusElement(
+          topFieldSectionRef.current,
+          document.getElementById(
+            tripMode === "pickup" ? "pickup-airport-button" : "drop-airport-button"
+          ) as HTMLElement | null
+        );
+      } else {
+        scrollAndFocusElement(
+          topFieldSectionRef.current,
+          tripMode === "pickup"
+            ? pickupAddressInputRef.current
+            : dropAddressInputRef.current
+        );
+      }
+      return false;
+    }
+
+    if (nextErrors.secondField) {
+      if (secondField.type === "airport") {
+        scrollAndFocusElement(
+          secondFieldSectionRef.current,
+          document.getElementById(
+            tripMode === "pickup" ? "drop-airport-button" : "pickup-airport-button"
+          ) as HTMLElement | null
+        );
+      } else {
+        scrollAndFocusElement(
+          secondFieldSectionRef.current,
+          tripMode === "pickup"
+            ? dropAddressInputRef.current
+            : pickupAddressInputRef.current
+        );
+      }
+      return false;
+    }
+
+    if (nextErrors.selectedDate) {
+      scrollAndFocusElement(scheduleSectionRef.current, dateInputRef.current);
+      return false;
+    }
+
+    if (nextErrors.selectedTime) {
+      scrollAndFocusElement(scheduleSectionRef.current, timeInputRef.current);
+      return false;
+    }
+
+    if (nextErrors.selectedPassengerCount) {
+      scrollAndFocusElement(passengerSectionRef.current, passengerButtonRef.current);
+      return false;
+    }
+
+    if (nextErrors.selectedVehicleType) {
+      scrollAndFocusElement(vehicleSectionRef.current, vehicleCardsRef.current);
+      return false;
+    }
+
+    return true;
   };
 
   const handleAddressFocus = (side: TripMode) => {
@@ -323,16 +557,27 @@ export default function UserPage() {
 
   const renderAirportPicker = (
     currentValue: string,
-    onSelect: (value: string) => void
+    onSelect: (value: string) => void,
+    options?: {
+      buttonId?: string;
+      hasError?: boolean;
+      errorMessage?: string;
+      errorKey?: keyof BookingErrorState;
+    }
   ) => (
     <div ref={airportPickerRef} className="relative mt-2">
       <button
+        id={options?.buttonId}
         type="button"
         onClick={() => {
           setIsAirportMenuOpen((prev) => !prev);
           setIsPassengerMenuOpen(false);
         }}
-        className="flex h-12 w-full items-center justify-between rounded-2xl border border-[#D6E7F5] bg-white px-4 text-left text-sm text-[#17324F] outline-none transition hover:border-[#B7D8F4] focus:border-[#38B6FF] focus:ring-4 focus:ring-[#38B6FF]/10"
+        className={`flex h-12 w-full items-center justify-between rounded-2xl border bg-white px-4 text-left text-sm text-[#17324F] outline-none transition hover:border-[#B7D8F4] focus:ring-4 focus:ring-[#38B6FF]/10 ${
+          options?.hasError
+            ? "border-[#F56B6B] focus:border-[#F56B6B] ring-4 ring-[#F56B6B]/10"
+            : "border-[#D6E7F5] focus:border-[#38B6FF]"
+        }`}
       >
         <span className="truncate">{currentValue}</span>
         <span className="ml-3 text-[#5F7490]">▾</span>
@@ -350,6 +595,9 @@ export default function UserPage() {
                 onPointerDown={(event) => {
                   event.preventDefault();
                   onSelect(airport);
+                  if (options?.errorKey) {
+                    clearFieldError(options.errorKey);
+                  }
                   setIsAirportMenuOpen(false);
                 }}
                 className={`flex w-full items-center justify-between px-4 py-3 text-left text-sm transition hover:bg-[#EAF6FF] ${
@@ -372,11 +620,16 @@ export default function UserPage() {
     <div ref={passengerPickerRef} className="relative mt-2">
       <button
         type="button"
+        ref={passengerButtonRef}
         onClick={() => {
           setIsPassengerMenuOpen((prev) => !prev);
           setIsAirportMenuOpen(false);
         }}
-        className="flex h-12 w-full items-center justify-between rounded-2xl border border-[#D6E7F5] bg-white px-4 text-left text-sm text-[#17324F] outline-none transition hover:border-[#B7D8F4] focus:border-[#38B6FF] focus:ring-4 focus:ring-[#38B6FF]/10"
+        className={`flex h-12 w-full items-center justify-between rounded-2xl border bg-white px-4 text-left text-sm text-[#17324F] outline-none transition hover:border-[#B7D8F4] focus:ring-4 focus:ring-[#38B6FF]/10 ${
+          bookingErrors.selectedPassengerCount
+            ? "border-[#F56B6B] focus:border-[#F56B6B] ring-4 ring-[#F56B6B]/10"
+            : "border-[#D6E7F5] focus:border-[#38B6FF]"
+        }`}
       >
         <span>
           {selectedPassengerCount} passenger
@@ -399,6 +652,7 @@ export default function UserPage() {
                   event.preventDefault();
                   setSelectedPassengerCount(value);
                   setIsPassengerMenuOpen(false);
+                  clearFieldError("selectedPassengerCount");
                 }}
                 className={`flex w-full items-center justify-between px-4 py-3 text-left text-sm transition hover:bg-[#EAF6FF] ${
                   isActive
@@ -419,7 +673,7 @@ export default function UserPage() {
   );
 
   const renderVehicleTypeCards = () => (
-    <div className="mt-2 grid grid-cols-2 gap-2">
+    <div ref={vehicleCardsRef} tabIndex={-1} className="mt-2 grid grid-cols-2 gap-2 outline-none">
       {vehicleOptions.map((vehicle) => {
         const isSelected = selectedVehicleType === vehicle.id;
 
@@ -427,11 +681,18 @@ export default function UserPage() {
           <button
             key={vehicle.id}
             type="button"
-            onClick={() => setSelectedVehicleType(vehicle.id)}
+            onClick={() => {
+              setSelectedVehicleType(vehicle.id);
+              clearFieldError("selectedVehicleType");
+            }}
             className={`group relative overflow-hidden rounded-2xl border bg-white text-left transition focus:outline-none focus:ring-4 focus:ring-[#38B6FF]/15 ${
               isSelected
-                ? "border-[#38B6FF] shadow-[0_10px_20px_rgba(56,182,255,0.22)]"
-                : "border-[#D6E7F5] hover:border-[#A9D8FF]"
+                ? bookingErrors.selectedVehicleType
+                  ? "border-[#F56B6B] shadow-[0_10px_20px_rgba(56,182,255,0.22)] ring-4 ring-[#F56B6B]/10"
+                  : "border-[#38B6FF] shadow-[0_10px_20px_rgba(56,182,255,0.22)]"
+                : bookingErrors.selectedVehicleType
+                  ? "border-[#F56B6B] hover:border-[#F56B6B]"
+                  : "border-[#D6E7F5] hover:border-[#A9D8FF]"
             }`}
             aria-pressed={isSelected}
           >
@@ -473,6 +734,55 @@ export default function UserPage() {
       })}
     </div>
   );
+
+  const handleBookNow = () => {
+    if (isPending || !sessionData?.session) {
+      router.push("/login");
+      return;
+    }
+
+    if (!validateBookingForm()) return;
+
+    const selectedVehicle = vehicleOptions.find(
+      (vehicle) => vehicle.id === selectedVehicleType
+    );
+
+    if (!selectedVehicle || typeof window === "undefined") return;
+
+    const pickupIsAirport = tripMode === "pickup";
+    const pickupLocation = pickupIsAirport ? pickupAirport : pickupAddress;
+    const dropLocation = pickupIsAirport ? dropAddress : dropAirport;
+
+    const bookingSummary: BookingSummary = {
+      tripMode,
+      pickupLocation,
+      dropLocation,
+      pickupLabel: pickupIsAirport ? "Pickup (Airport)" : "Pickup (Address)",
+      dropLabel: pickupIsAirport ? "Drop (Address)" : "Drop (Airport)",
+      pickupAirport,
+      dropAirport,
+      pickupAddress,
+      dropAddress,
+      date: selectedDate,
+      time: selectedTime,
+      meridiem: selectedMeridiem,
+      passengerCount: selectedPassengerCount,
+      vehicleType: selectedVehicle.id,
+      vehicleLabel: selectedVehicle.label,
+      vehicleImageSrc: selectedVehicle.imageSrc,
+      passengerRange: selectedVehicle.passengerRange,
+      bagLimit: selectedVehicle.bagLimit,
+      vehicleHighlights: selectedVehicle.highlights,
+    };
+
+    window.sessionStorage.setItem(
+      bookingSummaryStorageKey,
+      JSON.stringify(bookingSummary)
+    );
+
+    setBookingErrors({});
+    router.push("/ride-summary");
+  };
 
   if (isPending || !sessionData?.session) {
     return (
@@ -636,37 +946,68 @@ export default function UserPage() {
             </div>
 
             <div className="mt-4 space-y-4 lg:mt-3 lg:space-y-3">
-              <label className="block text-sm font-semibold text-[#1C3553]">
+              <label ref={topFieldSectionRef} className="block text-sm font-semibold text-[#1C3553]">
                 {topField.label}
                 {topField.type === "airport" ? (
                   renderAirportPicker(
                     tripMode === "pickup" ? pickupAirport : dropAirport,
-                    tripMode === "pickup" ? setPickupAirport : setDropAirport
+                    tripMode === "pickup" ? setPickupAirport : setDropAirport,
+                    {
+                      buttonId:
+                        tripMode === "pickup" ? "pickup-airport-button" : "drop-airport-button",
+                      hasError: Boolean(bookingErrors.topField),
+                      errorKey: "topField",
+                    }
                   )
                 ) : (
-                  <input
-                    key={`address-${tripMode}-top`}
-                    ref={tripMode === "pickup" ? dropAddressInputRef : pickupAddressInputRef}
-                    type="text"
-                    value={tripMode === "pickup" ? pickupAddress : dropAddress}
-                    onFocus={() => handleAddressFocus(tripMode)}
-                    onChange={(event) =>
-                      tripMode === "pickup"
-                        ? setPickupAddress(event.target.value)
-                        : setDropAddress(event.target.value)
-                    }
-                    placeholder={topField.placeholder}
-                    className="mt-2 h-12 w-full rounded-2xl border border-[#D6E7F5] bg-white px-4 text-sm text-[#17324F] outline-none transition placeholder:text-[#7B8DA3] focus:border-[#38B6FF] focus:ring-4 focus:ring-[#38B6FF]/10 lg:h-11"
-                  />
+                  <>
+                    <input
+                      key={`address-${tripMode}-top`}
+                      ref={tripMode === "pickup" ? dropAddressInputRef : pickupAddressInputRef}
+                      type="text"
+                      value={tripMode === "pickup" ? pickupAddress : dropAddress}
+                      onFocus={() => handleAddressFocus(tripMode)}
+                      onChange={(event) => {
+                        clearFieldError("topField");
+                        if (tripMode === "pickup") {
+                          setPickupAddress(event.target.value);
+                        } else {
+                          setDropAddress(event.target.value);
+                        }
+                      }}
+                      placeholder={topField.placeholder}
+                      className={`mt-2 h-12 w-full rounded-2xl border bg-white px-4 text-sm text-[#17324F] outline-none transition placeholder:text-[#7B8DA3] focus:ring-4 focus:ring-[#38B6FF]/10 lg:h-11 ${
+                        bookingErrors.topField
+                          ? "border-[#F56B6B] focus:border-[#F56B6B] ring-4 ring-[#F56B6B]/10"
+                          : "border-[#D6E7F5] focus:border-[#38B6FF]"
+                      }`}
+                    />
+                    {bookingErrors.topField ? (
+                      <p className="mt-1 text-xs font-medium text-[#E25555]">
+                        {bookingErrors.topField}
+                      </p>
+                    ) : null}
+                  </>
                 )}
+                {topField.type === "airport" && bookingErrors.topField ? (
+                  <p className="mt-1 text-xs font-medium text-[#E25555]">
+                    {bookingErrors.topField}
+                  </p>
+                ) : null}
               </label>
 
-              <label className="block text-sm font-semibold text-[#1C3553]">
+              <label ref={secondFieldSectionRef} className="block text-sm font-semibold text-[#1C3553]">
                 {secondField.label}
                 {secondField.type === "airport" ? (
                   renderAirportPicker(
                     tripMode === "pickup" ? pickupAirport : dropAirport,
-                    tripMode === "pickup" ? setPickupAirport : setDropAirport
+                    tripMode === "pickup" ? setPickupAirport : setDropAirport,
+                    {
+                      buttonId:
+                        tripMode === "pickup" ? "drop-airport-button" : "pickup-airport-button",
+                      hasError: Boolean(bookingErrors.secondField),
+                      errorKey: "secondField",
+                    }
                   )
                 ) : (
                   <>
@@ -676,52 +1017,144 @@ export default function UserPage() {
                       type="text"
                       value={tripMode === "pickup" ? dropAddress : pickupAddress}
                       onFocus={() => handleAddressFocus(tripMode)}
-                      onChange={(event) =>
-                        tripMode === "pickup"
-                          ? setDropAddress(event.target.value)
-                          : setPickupAddress(event.target.value)
-                      }
+                      onChange={(event) => {
+                        clearFieldError("secondField");
+                        if (tripMode === "pickup") {
+                          setDropAddress(event.target.value);
+                        } else {
+                          setPickupAddress(event.target.value);
+                        }
+                      }}
                       placeholder={secondField.placeholder}
-                      className="mt-2 h-12 w-full rounded-2xl border border-[#D6E7F5] bg-white px-4 text-sm text-[#17324F] outline-none transition placeholder:text-[#7B8DA3] focus:border-[#38B6FF] focus:ring-4 focus:ring-[#38B6FF]/10 lg:h-11"
+                      className={`mt-2 h-12 w-full rounded-2xl border bg-white px-4 text-sm text-[#17324F] outline-none transition placeholder:text-[#7B8DA3] focus:ring-4 focus:ring-[#38B6FF]/10 lg:h-11 ${
+                        bookingErrors.secondField
+                          ? "border-[#F56B6B] focus:border-[#F56B6B] ring-4 ring-[#F56B6B]/10"
+                          : "border-[#D6E7F5] focus:border-[#38B6FF]"
+                      }`}
                     />
                     <p className="mt-2 text-xs font-normal text-[#5D7490] lg:mt-1.5">
                       Google Places autocomplete is enabled here.
                     </p>
+                    {bookingErrors.secondField ? (
+                      <p className="mt-1 text-xs font-medium text-[#E25555]">
+                        {bookingErrors.secondField}
+                      </p>
+                    ) : null}
                   </>
                 )}
+                {secondField.type === "airport" && bookingErrors.secondField ? (
+                  <p className="mt-1 text-xs font-medium text-[#E25555]">
+                    {bookingErrors.secondField}
+                  </p>
+                ) : null}
               </label>
 
-              <label className="block text-sm font-semibold text-[#1C3553]">
-                Date
-                <input
-                  ref={dateInputRef}
-                  type="date"
-                  min={getTomorrowDateValue()}
-                  value={selectedDate}
-                  onChange={handleDateChange}
-                  className="mt-2 h-12 w-full rounded-2xl border border-[#D6E7F5] bg-white px-4 text-sm text-[#17324F] outline-none transition focus:border-[#38B6FF] focus:ring-4 focus:ring-[#38B6FF]/10 lg:h-11"
-                />
-                <p className="mt-2 text-xs font-normal text-[#5D7490] lg:mt-1.5">
-                  Today is disabled. Select from tomorrow onward.
-                </p>
-              </label>
+              <div ref={scheduleSectionRef} className="block">
+                <p className="text-sm font-semibold text-[#1C3553]">Schedule the ride</p>
 
-              <label className="block text-sm font-semibold text-[#1C3553]">
+                <label className="mt-2 block text-sm font-semibold text-[#1C3553]">
+                  Date
+                  <input
+                    ref={dateInputRef}
+                    type="date"
+                    min={getTomorrowDateValue()}
+                    value={selectedDate}
+                    onChange={handleDateChange}
+                    className={`mt-2 h-12 w-full rounded-2xl border bg-white px-4 text-sm text-[#17324F] outline-none transition focus:ring-4 focus:ring-[#38B6FF]/10 lg:h-11 ${
+                      bookingErrors.selectedDate
+                        ? "border-[#F56B6B] focus:border-[#F56B6B] ring-4 ring-[#F56B6B]/10"
+                        : "border-[#D6E7F5] focus:border-[#38B6FF]"
+                    }`}
+                  />
+                  <p className="mt-2 text-xs font-normal text-[#5D7490] lg:mt-1.5">
+                    Today is disabled. Select from tomorrow onward.
+                  </p>
+                  {bookingErrors.selectedDate ? (
+                    <p className="mt-1 text-xs font-medium text-[#E25555]">
+                      {bookingErrors.selectedDate}
+                    </p>
+                  ) : null}
+                </label>
+
+                <label className="mt-3 block text-sm font-semibold text-[#1C3553]">
+                  Time
+                  <div
+                    className={`mt-2 flex h-12 items-stretch overflow-hidden rounded-2xl border bg-white outline-none transition focus-within:ring-4 focus-within:ring-[#38B6FF]/10 lg:h-11 ${
+                      bookingErrors.selectedTime
+                        ? "border-[#F56B6B] focus-within:border-[#F56B6B] focus-within:ring-4 focus-within:ring-[#F56B6B]/10"
+                        : "border-[#D6E7F5] focus-within:border-[#38B6FF]"
+                    }`}
+                  >
+                    <input
+                      ref={timeInputRef}
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="12:34"
+                      value={selectedTime}
+                      onChange={handleTimeChange}
+                      className="min-w-0 flex-1 border-0 bg-transparent px-4 text-sm text-[#17324F] outline-none"
+                    />
+
+                    <div className="my-1 mr-1 grid w-[92px] grid-cols-2 overflow-hidden rounded-xl border border-[#D6E7F5] bg-[#F8FBFF] sm:w-[108px]">
+                      {(["AM", "PM"] as const).map((period) => {
+                        const isActive = selectedMeridiem === period;
+
+                        return (
+                          <button
+                            key={period}
+                            type="button"
+                            onClick={() => setSelectedMeridiem(period)}
+                            aria-pressed={isActive}
+                            className={`text-sm font-semibold transition ${
+                              isActive
+                                ? "bg-gradient-to-r from-[#0B83E9] to-[#38B6FF] text-white"
+                                : "text-[#1C3553] hover:bg-[#EEF5FD]"
+                            }`}
+                          >
+                            {period}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs font-normal text-[#5D7490]">
+                    Choose a pickup time and whether it is AM or PM.
+                  </p>
+                  {bookingErrors.selectedTime ? (
+                    <p className="mt-1 text-xs font-medium text-[#E25555]">
+                      {bookingErrors.selectedTime}
+                    </p>
+                  ) : null}
+                </label>
+              </div>
+
+              <label ref={passengerSectionRef} className="block text-sm font-semibold text-[#1C3553]">
                 Passenger Count
                 {renderPassengerPicker()}
+                {bookingErrors.selectedPassengerCount ? (
+                  <p className="mt-1 text-xs font-medium text-[#E25555]">
+                    {bookingErrors.selectedPassengerCount}
+                  </p>
+                ) : null}
               </label>
 
-              <div className="block">
+              <div ref={vehicleSectionRef} className="block">
                 <p className="text-sm font-semibold text-[#1C3553]">Choose Your Ride</p>
                 <p className="mt-0.5 text-xs font-medium text-[#5D7490]">
                   Select a vehicle that fits your needs
                 </p>
                 {renderVehicleTypeCards()}
+                {bookingErrors.selectedVehicleType ? (
+                  <p className="mt-1 text-xs font-medium text-[#E25555]">
+                    {bookingErrors.selectedVehicleType}
+                  </p>
+                ) : null}
               </div>
             </div>
 
             <button
               type="button"
+              onClick={handleBookNow}
               className="mt-5 inline-flex h-12 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-[#0B83E9] to-[#38B6FF] text-lg font-bold text-white shadow-md shadow-[#3AA7EE]/35 transition hover:brightness-105 lg:mt-4 lg:h-11 lg:text-base"
             >
               Book Now
