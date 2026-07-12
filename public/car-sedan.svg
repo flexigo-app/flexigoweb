@@ -1,0 +1,55 @@
+<svg width="1200" height="520" viewBox="0 0 1200 520" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="sedanBody" x1="242" y1="148" x2="922" y2="332" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F7F8FA"/>
+      <stop offset="0.44" stop-color="#DFE4EA"/>
+      <stop offset="1" stop-color="#BCC6D2"/>
+    </linearGradient>
+    <linearGradient id="sedanWindow" x1="413" y1="128" x2="729" y2="213" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#DBEAF8"/>
+      <stop offset="0.62" stop-color="#A8C2D9"/>
+      <stop offset="1" stop-color="#8AA3BC"/>
+    </linearGradient>
+    <linearGradient id="sedanTrim" x1="261" y1="274" x2="915" y2="274" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B5BFCC"/>
+      <stop offset="0.48" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#A0AABA"/>
+    </linearGradient>
+    <filter id="carShadow" x="118" y="300" width="964" height="130" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#carShadow)">
+    <ellipse cx="600" cy="366" rx="430" ry="28" fill="#000" fill-opacity="0.24"/>
+  </g>
+
+  <path d="M261 286V236C261 203 288 176 321 176H381L440 118C457 102 480 93 503 93H674C698 93 720 102 736 118L795 176H855C888 176 915 203 915 236V286C915 318 888 345 855 345H839C830 303 793 273 748 273C704 273 668 303 658 345H518C508 303 471 273 426 273C382 273 346 303 336 345H321C288 345 261 318 261 286Z" fill="url(#sedanBody)"/>
+
+  <path d="M341 174H427L470 131C482 120 498 114 515 114H575V174H341Z" fill="url(#sedanWindow)"/>
+  <path d="M587 114H665C684 114 702 121 716 135L757 174H587V114Z" fill="url(#sedanWindow)"/>
+
+  <path d="M273 272H903" stroke="url(#sedanTrim)" stroke-width="6" stroke-linecap="round"/>
+  <path d="M285 304H889" stroke="#FFFFFF" stroke-opacity="0.52" stroke-width="4" stroke-linecap="round"/>
+
+  <rect x="528" y="122" width="8" height="223" fill="#9EA9B6" fill-opacity="0.65"/>
+  <rect x="689" y="122" width="8" height="223" fill="#9EA9B6" fill-opacity="0.65"/>
+
+  <path d="M284 223C284 217 289 212 295 212H324C330 212 335 217 335 223V235H284V223Z" fill="#FFD062"/>
+  <path d="M851 212H880C886 212 891 217 891 223V235H840V223C840 217 845 212 851 212Z" fill="#DF5454"/>
+
+  <circle cx="426" cy="345" r="72" fill="#1F2631"/>
+  <circle cx="748" cy="345" r="72" fill="#1F2631"/>
+
+  <circle cx="426" cy="345" r="45" fill="#4C5663"/>
+  <circle cx="748" cy="345" r="45" fill="#4C5663"/>
+
+  <circle cx="426" cy="345" r="24" fill="#DDE3EB"/>
+  <circle cx="748" cy="345" r="24" fill="#DDE3EB"/>
+
+  <circle cx="426" cy="345" r="8" fill="#919DAC"/>
+  <circle cx="748" cy="345" r="8" fill="#919DAC"/>
+
+  <path d="M349 168H784" stroke="#FFFFFF" stroke-opacity="0.74" stroke-width="6" stroke-linecap="round"/>
+  <path d="M326 196H819" stroke="#FFFFFF" stroke-opacity="0.36" stroke-width="4" stroke-linecap="round"/>
+</svg>

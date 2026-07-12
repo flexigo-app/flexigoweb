@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { Montserrat } from "next/font/google";
 import { useRouter } from "next/navigation";
@@ -14,6 +15,7 @@ const montserrat = Montserrat({
 
 type TripMode = "pickup" | "drop";
 type FieldKind = "airport" | "address";
+type VehicleType = "sedan" | "suv";
 
 type GooglePlacesAutocompletePlace = {
   formatted_address?: string;
@@ -48,6 +50,31 @@ const airportOptions = [
 ];
 
 const passengerOptions = [1, 2, 3, 4, 5, 6];
+const vehicleOptions: Array<{
+  id: VehicleType;
+  label: string;
+  passengerRange: string;
+  bagLimit: string;
+  highlights: string[];
+  imageSrc: string;
+}> = [
+  {
+    id: "suv",
+    label: "SUV",
+    passengerRange: "1 - 6",
+    bagLimit: "Up to 6 bags",
+    highlights: ["Spacious", "Comfortable", "Extra Luggage"],
+    imageSrc: "/SUV-v2.png",
+  },
+  {
+    id: "sedan",
+    label: "Sedan",
+    passengerRange: "1 - 3",
+    bagLimit: "Up to 3 bags",
+    highlights: ["Affordable", "Comfortable", "Everyday Rides"],
+    imageSrc: "/Sedan.png",
+  },
+];
 const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
 const getTomorrowDateValue = () => {
@@ -73,6 +100,7 @@ export default function UserPage() {
   const [pickupAirport, setPickupAirport] = useState(airportOptions[0]);
   const [dropAirport, setDropAirport] = useState(airportOptions[0]);
   const [selectedPassengerCount, setSelectedPassengerCount] = useState("1");
+  const [selectedVehicleType, setSelectedVehicleType] = useState<VehicleType>("suv");
   const [selectedDate, setSelectedDate] = useState(getTomorrowDateValue());
   const [pickupAddress, setPickupAddress] = useState("");
   const [dropAddress, setDropAddress] = useState("");
@@ -82,6 +110,7 @@ export default function UserPage() {
   const passengerPickerRef = useRef<HTMLDivElement | null>(null);
   const pickupAddressInputRef = useRef<HTMLInputElement | null>(null);
   const dropAddressInputRef = useRef<HTMLInputElement | null>(null);
+  const dateInputRef = useRef<HTMLInputElement | null>(null);
   const pickupAutocompleteRef = useRef<GooglePlacesAutocompleteInstance | null>(null);
   const dropAutocompleteRef = useRef<GooglePlacesAutocompleteInstance | null>(null);
   const pickupBoundInputRef = useRef<HTMLInputElement | null>(null);
@@ -246,6 +275,15 @@ export default function UserPage() {
     setIsPassengerMenuOpen(false);
   };
 
+  const handleDateChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setSelectedDate(event.target.value);
+
+    // Safari keeps date popovers open until blur in some layouts.
+    requestAnimationFrame(() => {
+      dateInputRef.current?.blur();
+    });
+  };
+
   const handleAddressFocus = (side: TripMode) => {
     if (side === "pickup") {
       bindPlacesAutocomplete(
@@ -301,7 +339,7 @@ export default function UserPage() {
       </button>
 
       {isAirportMenuOpen ? (
-        <div className="relative z-40 mt-2 overflow-hidden rounded-2xl border border-[#BFE5FF] bg-white shadow-2xl">
+        <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-50 max-h-64 overflow-y-auto rounded-2xl border border-[#BFE5FF] bg-white shadow-2xl">
           {airportOptions.map((airport) => {
             const isActive = airport === currentValue;
 
@@ -309,7 +347,8 @@ export default function UserPage() {
               <button
                 key={airport}
                 type="button"
-                onClick={() => {
+                onPointerDown={(event) => {
+                  event.preventDefault();
                   onSelect(airport);
                   setIsAirportMenuOpen(false);
                 }}
@@ -347,7 +386,7 @@ export default function UserPage() {
       </button>
 
       {isPassengerMenuOpen ? (
-        <div className="relative z-40 mt-2 overflow-hidden rounded-2xl border border-[#BFE5FF] bg-white shadow-2xl">
+        <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-50 max-h-64 overflow-y-auto rounded-2xl border border-[#BFE5FF] bg-white shadow-2xl">
           {passengerOptions.map((count) => {
             const value = String(count);
             const isActive = value === selectedPassengerCount;
@@ -356,7 +395,8 @@ export default function UserPage() {
               <button
                 key={count}
                 type="button"
-                onClick={() => {
+                onPointerDown={(event) => {
+                  event.preventDefault();
                   setSelectedPassengerCount(value);
                   setIsPassengerMenuOpen(false);
                 }}
@@ -375,6 +415,62 @@ export default function UserPage() {
           })}
         </div>
       ) : null}
+    </div>
+  );
+
+  const renderVehicleTypeCards = () => (
+    <div className="mt-2 grid grid-cols-2 gap-2">
+      {vehicleOptions.map((vehicle) => {
+        const isSelected = selectedVehicleType === vehicle.id;
+
+        return (
+          <button
+            key={vehicle.id}
+            type="button"
+            onClick={() => setSelectedVehicleType(vehicle.id)}
+            className={`group relative overflow-hidden rounded-2xl border bg-white text-left transition focus:outline-none focus:ring-4 focus:ring-[#38B6FF]/15 ${
+              isSelected
+                ? "border-[#38B6FF] shadow-[0_10px_20px_rgba(56,182,255,0.22)]"
+                : "border-[#D6E7F5] hover:border-[#A9D8FF]"
+            }`}
+            aria-pressed={isSelected}
+          >
+            <span
+              className={`absolute right-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full border text-xs font-bold transition ${
+                isSelected
+                  ? "border-[#1E88FF] bg-[#1E88FF] text-white"
+                  : "border-[#C7D7E6] bg-white text-transparent"
+              }`}
+            >
+              ✓
+            </span>
+
+            <div className="relative h-20 w-full bg-[#F4FAFF] px-2 pt-2">
+              <Image
+                src={vehicle.imageSrc}
+                alt={`${vehicle.label} option`}
+                fill
+                unoptimized
+                className="object-contain p-1"
+                sizes="(max-width: 640px) 50vw, 20vw"
+              />
+            </div>
+
+            <div className="px-2.5 py-2">
+              <p className="text-base font-semibold leading-none text-[#17324F]">{vehicle.label}</p>
+
+              <div className="mt-2 flex items-center gap-3 text-[11px] font-semibold text-[#5D7490]">
+                <span>{vehicle.passengerRange}</span>
+                <span>{vehicle.bagLimit}</span>
+              </div>
+
+              <div className="mt-2 rounded-full bg-[#EEF4FA] px-2 py-1 text-[10px] font-semibold text-[#556C86]">
+                {vehicle.highlights.join(" • ")}
+              </div>
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 
@@ -469,12 +565,12 @@ export default function UserPage() {
         </div>
       </header>
 
-      <section className="mx-auto flex w-full max-w-[1400px] flex-col gap-6 px-4 py-4 sm:px-6 sm:py-6 lg:grid lg:grid-cols-[minmax(0,560px)_minmax(0,1fr)] lg:gap-8 lg:px-8 lg:py-8">
+      <section className="user-dashboard-layout mx-auto flex w-full max-w-[1400px] flex-col gap-6 px-4 py-4 sm:px-6 sm:py-6 lg:grid lg:grid-cols-[minmax(0,540px)_minmax(0,1fr)] lg:items-start lg:gap-6 lg:px-8 lg:py-4">
         <div className="w-full">
           <button
             type="button"
             onClick={() => setIsGreetingCompact((prev) => !prev)}
-            className={`mb-4 inline-flex h-10 items-center gap-2 overflow-hidden rounded-full border border-[#B9E3FF] bg-white px-2 text-[#10416A] shadow-sm transition-all duration-300 ${
+            className={`dashboard-greeting-pill mb-3 inline-flex h-10 items-center gap-2 overflow-hidden rounded-full border border-[#B9E3FF] bg-white px-2 text-[#10416A] shadow-sm transition-all duration-300 ${
               isGreetingCompact ? "w-10" : "w-auto pr-4"
             }`}
           >
@@ -501,19 +597,19 @@ export default function UserPage() {
             </span>
           </button>
 
-          <div className="rounded-3xl border border-[#D6ECFF] bg-white p-4 shadow-[0_8px_24px_rgba(10,66,130,0.08)] sm:p-6">
+          <div className="dashboard-booking-card rounded-3xl border border-[#D6ECFF] bg-white p-4 shadow-[0_8px_24px_rgba(10,66,130,0.08)] sm:p-6 lg:p-5">
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#3A8EC6]">
               Connecticut booking
             </p>
 
-            <h2 className="mt-2 max-w-md text-3xl font-extrabold leading-tight text-[#102A43] sm:text-4xl">
+            <h2 className="mt-2 max-w-md text-3xl font-extrabold leading-tight text-[#102A43] sm:text-4xl lg:text-[2rem]">
               Reliable Airport Rides from Connecticut
             </h2>
-            <p className="mt-3 text-base text-[#355070] sm:text-lg">
+            <p className="mt-2 text-base text-[#355070] sm:text-lg lg:text-base">
               Doorstep pickup. On-time drop. Every time.
             </p>
 
-            <div className="relative mt-5 grid grid-cols-2 rounded-full bg-[#EDF6FF] p-1.5">
+            <div className="relative mt-4 grid grid-cols-2 rounded-full bg-[#EDF6FF] p-1.5 lg:mt-3">
               <span
                 className={`absolute inset-y-1.5 left-1.5 w-[calc(50%-0.375rem)] rounded-full bg-gradient-to-r from-[#0B83E9] to-[#38B6FF] shadow-sm transition-transform duration-300 ease-out ${
                   tripMode === "pickup" ? "translate-x-0" : "translate-x-full"
@@ -539,7 +635,7 @@ export default function UserPage() {
               </button>
             </div>
 
-            <div className="mt-5 space-y-4">
+            <div className="mt-4 space-y-4 lg:mt-3 lg:space-y-3">
               <label className="block text-sm font-semibold text-[#1C3553]">
                 {topField.label}
                 {topField.type === "airport" ? (
@@ -560,7 +656,7 @@ export default function UserPage() {
                         : setDropAddress(event.target.value)
                     }
                     placeholder={topField.placeholder}
-                    className="mt-2 h-12 w-full rounded-2xl border border-[#D6E7F5] bg-white px-4 text-sm text-[#17324F] outline-none transition placeholder:text-[#7B8DA3] focus:border-[#38B6FF] focus:ring-4 focus:ring-[#38B6FF]/10"
+                    className="mt-2 h-12 w-full rounded-2xl border border-[#D6E7F5] bg-white px-4 text-sm text-[#17324F] outline-none transition placeholder:text-[#7B8DA3] focus:border-[#38B6FF] focus:ring-4 focus:ring-[#38B6FF]/10 lg:h-11"
                   />
                 )}
               </label>
@@ -586,9 +682,9 @@ export default function UserPage() {
                           : setPickupAddress(event.target.value)
                       }
                       placeholder={secondField.placeholder}
-                      className="mt-2 h-12 w-full rounded-2xl border border-[#D6E7F5] bg-white px-4 text-sm text-[#17324F] outline-none transition placeholder:text-[#7B8DA3] focus:border-[#38B6FF] focus:ring-4 focus:ring-[#38B6FF]/10"
+                      className="mt-2 h-12 w-full rounded-2xl border border-[#D6E7F5] bg-white px-4 text-sm text-[#17324F] outline-none transition placeholder:text-[#7B8DA3] focus:border-[#38B6FF] focus:ring-4 focus:ring-[#38B6FF]/10 lg:h-11"
                     />
-                    <p className="mt-2 text-xs font-normal text-[#5D7490]">
+                    <p className="mt-2 text-xs font-normal text-[#5D7490] lg:mt-1.5">
                       Google Places autocomplete is enabled here.
                     </p>
                   </>
@@ -598,13 +694,14 @@ export default function UserPage() {
               <label className="block text-sm font-semibold text-[#1C3553]">
                 Date
                 <input
+                  ref={dateInputRef}
                   type="date"
                   min={getTomorrowDateValue()}
                   value={selectedDate}
-                  onChange={(event) => setSelectedDate(event.target.value)}
-                  className="mt-2 h-12 w-full rounded-2xl border border-[#D6E7F5] bg-white px-4 text-sm text-[#17324F] outline-none transition focus:border-[#38B6FF] focus:ring-4 focus:ring-[#38B6FF]/10"
+                  onChange={handleDateChange}
+                  className="mt-2 h-12 w-full rounded-2xl border border-[#D6E7F5] bg-white px-4 text-sm text-[#17324F] outline-none transition focus:border-[#38B6FF] focus:ring-4 focus:ring-[#38B6FF]/10 lg:h-11"
                 />
-                <p className="mt-2 text-xs font-normal text-[#5D7490]">
+                <p className="mt-2 text-xs font-normal text-[#5D7490] lg:mt-1.5">
                   Today is disabled. Select from tomorrow onward.
                 </p>
               </label>
@@ -613,16 +710,24 @@ export default function UserPage() {
                 Passenger Count
                 {renderPassengerPicker()}
               </label>
+
+              <div className="block">
+                <p className="text-sm font-semibold text-[#1C3553]">Choose Your Ride</p>
+                <p className="mt-0.5 text-xs font-medium text-[#5D7490]">
+                  Select a vehicle that fits your needs
+                </p>
+                {renderVehicleTypeCards()}
+              </div>
             </div>
 
             <button
               type="button"
-              className="mt-6 inline-flex h-12 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-[#0B83E9] to-[#38B6FF] text-lg font-bold text-white shadow-md shadow-[#3AA7EE]/35 transition hover:brightness-105"
+              className="mt-5 inline-flex h-12 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-[#0B83E9] to-[#38B6FF] text-lg font-bold text-white shadow-md shadow-[#3AA7EE]/35 transition hover:brightness-105 lg:mt-4 lg:h-11 lg:text-base"
             >
               Book Now
             </button>
 
-            <div className="mt-6 grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
+            <div className="mt-5 grid grid-cols-2 gap-3 text-center sm:grid-cols-4 lg:hidden">
               <div className="rounded-xl bg-[#F3FAFF] p-3">
                 <p className="text-sm font-semibold text-[#1E3A5C]">Safe</p>
                 <p className="mt-1 text-xs text-[#5A708A]">Reliable rides</p>
@@ -641,7 +746,7 @@ export default function UserPage() {
               </div>
             </div>
 
-            <div className="mt-5">
+            <div className="mt-4 lg:mt-3">
               <Link
                 href="/"
                 className="inline-flex text-sm font-medium text-[#0E4A78] underline underline-offset-4"
@@ -652,7 +757,7 @@ export default function UserPage() {
           </div>
         </div>
 
-        <aside className="relative hidden min-h-[760px] overflow-hidden rounded-[32px] border border-[#BEE4FF] bg-[#1A9AF0] lg:flex lg:flex-col lg:justify-end">
+        <aside className="dashboard-hero-panel relative hidden min-h-[620px] overflow-hidden rounded-[32px] border border-[#BEE4FF] bg-[#1A9AF0] lg:flex lg:min-h-[calc(100vh-8.5rem)] lg:flex-col lg:justify-end">
           <div
             className="absolute inset-0"
             style={{
