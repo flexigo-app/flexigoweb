@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   bookingSummaryStorageKey,
+  calculateFare,
   formatSummaryDate,
   formatSummaryTime,
   type BookingSummary,
@@ -19,15 +20,6 @@ const montserrat = Montserrat({
 });
 
 const formatRideTypeLabel = (vehicleLabel: string) => vehicleLabel;
-
-const estimateFare = (summary: BookingSummary) => {
-  if (summary.vehicleType === "suv") return 200;
-  return 150;
-};
-
-const estimateDistance = () => "~100 miles";
-const estimateDuration = () => "~1h 45m";
-const estimateRoute = () => "I-95 S";
 
 export default function RideSummaryPage() {
   const router = useRouter();
@@ -65,9 +57,15 @@ export default function RideSummaryPage() {
   );
 
   const totalFare = useMemo(
-    () => (bookingSummary ? estimateFare(bookingSummary) : 0),
+    () =>
+      bookingSummary
+        ? calculateFare(bookingSummary.vehicleType, bookingSummary.routeDistanceMeters ?? 0)
+        : 0,
     [bookingSummary]
   );
+
+  const pickupIsAirport = bookingSummary ? bookingSummary.tripMode === "pickup" : false;
+  const dropIsAirport = bookingSummary ? bookingSummary.tripMode === "drop" : false;
 
   if (!bookingSummary) {
     return (
@@ -132,11 +130,11 @@ export default function RideSummaryPage() {
                   <div className="flex items-start gap-4">
                     <div className="flex flex-col items-center pt-1">
                       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#EAF4FF] text-2xl text-[#1567D9]">
-                        ✈
+                        {pickupIsAirport ? "✈" : "📍"}
                       </div>
                       <div className="my-2 h-10 w-px border-l-2 border-dashed border-[#B5D7FF]" />
                       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#EAF4FF] text-2xl text-[#1567D9]">
-                        📍
+                        {dropIsAirport ? "✈" : "📍"}
                       </div>
                     </div>
 
@@ -222,7 +220,10 @@ export default function RideSummaryPage() {
                         {bookingSummary.vehicleLabel}
                       </h3>
                       <div className="mt-3 flex flex-wrap gap-2 text-sm font-semibold text-[#1C3553]">
-                        <span className="rounded-full bg-[#EEF5FF] px-3 py-1">{bookingSummary.passengerRange}</span>
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#EEF5FF] px-3 py-1">
+                          <span aria-hidden="true">👥</span>
+                          <span>{bookingSummary.passengerRange}</span>
+                        </span>
                         <span className="rounded-full bg-[#EEF5FF] px-3 py-1">{bookingSummary.bagLimit}</span>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
@@ -238,18 +239,18 @@ export default function RideSummaryPage() {
                     </div>
                   </div>
 
-                  <div className="mt-5 grid grid-cols-3 gap-3 rounded-2xl border border-[#E8F2FB] bg-[#FBFDFF] p-4 text-center text-sm font-medium text-[#334C68]">
+                  <div className="mt-5 grid grid-cols-2 gap-3 rounded-2xl border border-[#E8F2FB] bg-[#FBFDFF] p-4 text-center text-sm font-medium text-[#334C68]">
                     <div>
                       <p className="text-xs uppercase tracking-[0.14em] text-[#7D91A9]">Distance</p>
-                      <p className="mt-1 font-semibold text-[#102A43]">{estimateDistance()}</p>
+                      <p className="mt-1 font-semibold text-[#102A43]">
+                        {bookingSummary.routeDistanceText || "Unavailable"}
+                      </p>
                     </div>
                     <div>
                       <p className="text-xs uppercase tracking-[0.14em] text-[#7D91A9]">Est. Duration</p>
-                      <p className="mt-1 font-semibold text-[#102A43]">{estimateDuration()}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.14em] text-[#7D91A9]">Route</p>
-                      <p className="mt-1 font-semibold text-[#102A43]">{estimateRoute()}</p>
+                      <p className="mt-1 font-semibold text-[#102A43]">
+                        {bookingSummary.routeDurationText || "Unavailable"}
+                      </p>
                     </div>
                   </div>
 

@@ -1,0 +1,121 @@
+Attached Element Context from Integrated Browser
+
+Element: input.min-w-0.flex-1.border-0.bg-transparent.px-4.text-sm.text-[#17324F].outline-none
+
+URL: http://localhost:3000/user
+
+HTML Path: main.min-h-screen.bg-[#EAF6FF].text-slate-900 > section.user-dashboard-layout.mx-auto.flex.w-full.max-w-[1400px].flex-col.gap-6.px-4.py-4.sm:px-6.sm:py-6.lg:grid.lg:grid-cols-[minmax(0,540px)_minmax(0,1fr)].lg:items-start.lg:gap-6.lg:px-8.lg:py-4 > div.w-full > div.dashboard-booking-card.rounded-3xl.border.border-[#D6ECFF].bg-white.p-4.shadow-[0_8px_24px_rgba(10,66,130,0.08)].sm:p-6.lg:p-5 > div.mt-4.space-y-4.lg:mt-3.lg:space-y-3 > div.block > label.mt-3.block.text-sm.font-semibold.text-[#1C3553] > div.mt-2.flex.h-12.items-stretch.overflow-hidden.rounded-2xl.border.bg-white.outline-none.transition.focus-within:ring-4.focus-within:ring-[#38B6FF]/10.lg:h-11.border-[#D6E7F5].focus-within:border-[#38B6FF] > input.min-w-0.flex-1.border-0.bg-transparent.px-4.text-sm.text-[#17324F].outline-none
+
+Outer HTML:
+```html
+<input inputmode="numeric" placeholder="12:34" class="min-w-0 flex-1 border-0 bg-transparent px-4 text-sm text-[#17324F] outline-none" type="text" value="65:78">
+```
+
+Dimensions:
+- top: 268px
+- left: 34px
+- width: 211px
+- height: 46px
+
+CSS:
+```css
+*, :after, :before, ::backdrop { box-sizing: border-box;
+    border: 0 solid;
+    margin: 0;
+    padding: 0; }
+button, input, select, optgroup, textarea { font: inherit;
+    font-feature-settings: inherit;
+    font-variation-settings: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+    opacity: 1;
+    background-color: #0000;
+    border-radius: 0; }
+.min-w-0 { min-width: 0; }
+.flex-1 { flex: 1; }
+.border-0 { border-style: var(--tw-border-style);
+    border-width: 0; }
+.bg-transparent { background-color: #0000; }
+.px-4 { padding-inline: calc(var(--spacing) * 4); }
+.text-sm { font-size: var(--text-sm);
+    line-height: var(--tw-leading, var(--text-sm--line-height)); }
+.text-\[\#17324F\] { color: #17324f; }
+.outline-none { --tw-outline-style: none;
+    outline-style: none; }
+
+/* Inherited */
+.text-sm { font-size: var(--text-sm); line-height: var(--tw-leading, var(--text-sm--line-height)) }
+.font-semibold { font-weight: var(--font-weight-semibold) }
+.text-\[\#1C3553\] { color: #1c3553 }
+.text-slate-900 { color: var(--color-slate-900) }
+body { color: var(--foreground); font-family: Arial, Helvetica, sans-serif }
+html, :host { tab-size: 4; line-height: 1.5; font-family: var(--default-font-family, ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"); font-feature-settings: var(--default-font-feature-settings, normal) }
+
+/* Resolved values */
+margin: 0px;
+padding: 0px 16px;
+border-radius: 0px;
+border: 0px solid rgb(23, 50, 79);
+-webkit-rtl-ordering: logical /*UA*/;
+appearance: auto /*UA*/;
+background-color: rgba(0, 0, 0, 0);
+box-sizing: border-box;
+color: rgb(23, 50, 79);
+cursor: text /*UA*/;
+display: block;
+flex-basis: 0%;
+flex-grow: 1;
+flex-shrink: 1;
+font-family: Arial, Helvetica, sans-serif;
+font-feature-settings: normal;
+font-kerning: auto;
+font-language-override: normal;
+font-optical-sizing: auto;
+font-size: 14px;
+font-size-adjust: none;
+font-stretch: 100%;
+font-style: normal;
+font-variant-alternates: normal;
+font-variant-caps: normal;
+font-variant-east-asian: normal;
+font-variant-emoji: normal;
+font-variant-ligatures: normal;
+font-variant-numeric: normal;
+font-variant-position: normal;
+font-variation-settings: normal;
+font-weight: 600;
+height: 46px;
+letter-spacing: normal;
+line-height: 20px;
+min-width: 0px;
+opacity: 1;
+outline-color: rgb(229, 151, 0) /*UA*/;
+outline-offset: 0px /*UA*/;
+outline-style: none;
+outline-width: 1px /*UA*/;
+overflow-clip-margin: 0px /*UA*/;
+overflow-x: clip /*UA*/;
+overflow-y: clip /*UA*/;
+padding-block-end: 0px /*UA*/;
+padding-block-start: 0px /*UA*/;
+padding-inline-end: 16px /*UA*/;
+padding-inline-start: 16px /*UA*/;
+tab-size: 4;
+text-align: start /*UA*/;
+text-indent: 0px /*UA*/;
+text-rendering: auto /*UA*/;
+text-shadow: none /*UA*/;
+text-transform: none /*UA*/;
+width: 211px;
+word-spacing: 0px /*UA*/;
+
+/* CSS variables */
+--color-slate-900: lab(7.78673% 1.82345 -15.0537);
+--spacing: .25rem;
+--font-weight-semibold: 600;
+--text-sm: .875rem;
+--tw-border-style: solid;
+--text-sm--line-height: calc(1.25 / .875);
+--default-font-family: "Geist", "Geist Fallback";
+--foreground: #ededed;
+```

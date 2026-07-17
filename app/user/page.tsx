@@ -33,6 +33,12 @@ type BookingErrorState = {
 type GooglePlacesAutocompletePlace = {
   formatted_address?: string;
   name?: string;
+  place_id?: string;
+  address_components?: Array<{
+    long_name?: string;
+    short_name?: string;
+    types?: string[];
+  }>;
 };
 
 type GooglePlacesAutocompleteInstance = {
@@ -43,14 +49,52 @@ type GooglePlacesAutocompleteInstance = {
 type GooglePlacesApi = {
   Autocomplete: new (
     input: HTMLInputElement,
-    options: { fields: string[]; types: string[] }
+    options: {
+      fields: string[];
+      types: string[];
+      componentRestrictions?: {
+        country: string;
+      };
+    }
   ) => GooglePlacesAutocompleteInstance;
+};
+
+type GoogleMapsDirectionsLeg = {
+  distance?: {
+    text?: string;
+    value?: number;
+  };
+  duration?: {
+    text?: string;
+    value?: number;
+  };
+};
+
+type GoogleMapsDirectionsResult = {
+  routes?: Array<{
+    legs?: GoogleMapsDirectionsLeg[];
+  }>;
+};
+
+type GoogleMapsDirectionsService = {
+  route: (
+    request: {
+      origin: string;
+      destination: string;
+      travelMode: string;
+    },
+    callback: (result: GoogleMapsDirectionsResult | null, status: string) => void
+  ) => void;
 };
 
 type GoogleMapsWindow = Window & {
   google?: {
     maps?: {
       places?: GooglePlacesApi;
+      DirectionsService?: new () => GoogleMapsDirectionsService;
+      TravelMode?: {
+        DRIVING: string;
+      };
     };
   };
 };
@@ -61,6 +105,17 @@ const airportOptions = [
   "Bradley International Airport (BDL)",
   "Newark Liberty International Airport (EWR)",
 ];
+
+const airportRouteLocationByLabel: Record<string, string> = {
+  "John F. Kennedy International Airport (JFK)":
+    "John F. Kennedy International Airport, Queens, NY 11430, USA",
+  "Boston Logan International Airport (BOS)":
+    "Boston Logan International Airport, Boston, MA 02128, USA",
+  "Bradley International Airport (BDL)":
+    "Bradley International Airport, Windsor Locks, CT 06096, USA",
+  "Newark Liberty International Airport (EWR)":
+    "Newark Liberty International Airport, Newark, NJ 07114, USA",
+};
 
 const passengerOptions = [1, 2, 3, 4, 5, 6];
 const vehicleOptions: Array<{
@@ -89,6 +144,7 @@ const vehicleOptions: Array<{
   },
 ];
 const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+const allowedAddressStateCodes = new Set(["CT", "MA"]);
 
 const getTomorrowDateValue = () => {
   const tomorrow = new Date();
@@ -108,6 +164,8 @@ const getBookingDefaultsFromSummary = (summary: BookingSummary | null) => {
     dropAirport: summary.dropAirport,
     pickupAddress: summary.pickupAddress,
     dropAddress: summary.dropAddress,
+    pickupAddressPlaceId: summary.pickupAddressPlaceId,
+    dropAddressPlaceId: summary.dropAddressPlaceId,
     selectedPassengerCount: summary.passengerCount,
     selectedVehicleType: summary.vehicleType,
     selectedDate: summary.date,
@@ -153,6 +211,14 @@ export default function UserPage() {
   );
   const [pickupAddress, setPickupAddress] = useState(bookingDefaults?.pickupAddress ?? "");
   const [dropAddress, setDropAddress] = useState(bookingDefaults?.dropAddress ?? "");
+  const [pickupAddressPlaceId, setPickupAddressPlaceId] = useState(
+    bookingDefaults?.pickupAddressPlaceId ?? ""
+  );
+  const [dropAddressPlaceId, setDropAddressPlaceId] = useState(
+    bookingDefaults?.dropAddressPlaceId ?? ""
+  );
+  const [pickupAddressStateCode, setPickupAddressStateCode] = useState("");
+  const [dropAddressStateCode, setDropAddressStateCode] = useState("");
   const [bookingErrors, setBookingErrors] = useState<BookingErrorState>({});
 
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -269,7 +335,7 @@ export default function UserPage() {
       inputRef: { current: HTMLInputElement | null },
       autocompleteRef: { current: GooglePlacesAutocompleteInstance | null },
       boundInputRef: { current: HTMLInputElement | null },
-      onAddressSelect: (value: string) => void
+      onAddressSelect: (value: string, placeId: string, stateCode: string) => void
     ) => {
     const googleWindow = window as GoogleMapsWindow;
     const places = googleWindow.google?.maps?.places;
@@ -278,14 +344,28 @@ export default function UserPage() {
     if (!places || !input || boundInputRef.current === input) return;
 
     const autocomplete = new places.Autocomplete(input, {
-      fields: ["formatted_address", "name"],
+      fields: ["formatted_address", "name", "place_id", "address_components"],
       types: ["address"],
+      componentRestrictions: { country: "us" },
     });
 
     autocomplete.addListener("place_changed", () => {
       const place = autocomplete.getPlace();
-      const formattedAddress = place?.formatted_address || input.value;
-      onAddressSelect(formattedAddress);
+      const formattedAddress = place?.formatted_address || "";
+      const placeId = place?.place_id || "";
+      const stateCode =
+        place?.address_components
+          ?.find((component) => component.types?.includes("administrative_area_level_1"))
+          ?.short_name || "";
+
+      if (!formattedAddress || !placeId) return;
+
+      if (!allowedAddressStateCodes.has(stateCode)) {
+        onAddressSelect(formattedAddress, "", stateCode);
+        return;
+      }
+
+      onAddressSelect(formattedAddress, placeId, stateCode);
     });
 
     autocompleteRef.current = autocomplete;
@@ -301,13 +381,21 @@ export default function UserPage() {
       pickupAddressInputRef,
       pickupAutocompleteRef,
       pickupBoundInputRef,
-      setPickupAddress
+      (value, placeId, stateCode) => {
+        setPickupAddress(value);
+        setPickupAddressPlaceId(placeId);
+        setPickupAddressStateCode(stateCode);
+      }
     );
     bindPlacesAutocomplete(
       dropAddressInputRef,
       dropAutocompleteRef,
       dropBoundInputRef,
-      setDropAddress
+      (value, placeId, stateCode) => {
+        setDropAddress(value);
+        setDropAddressPlaceId(placeId);
+        setDropAddressStateCode(stateCode);
+      }
     );
   }, [isPlacesScriptLoaded, bindPlacesAutocomplete]);
 
@@ -433,10 +521,36 @@ export default function UserPage() {
 
     if (!topFieldValue.trim()) {
       nextErrors.topField = `${topField.label} is required.`;
+    } else if (
+      topField.type === "address" &&
+      (tripMode === "pickup" ? !pickupAddressPlaceId : !dropAddressPlaceId)
+    ) {
+      nextErrors.topField =
+        "Please select a full Connecticut or Massachusetts address from Google suggestions.";
+    } else if (
+      topField.type === "address" &&
+      !allowedAddressStateCodes.has(
+        tripMode === "pickup" ? pickupAddressStateCode : dropAddressStateCode
+      )
+    ) {
+      nextErrors.topField = "Only Connecticut and Massachusetts addresses are allowed.";
     }
 
     if (!secondFieldValue.trim()) {
       nextErrors.secondField = `${secondField.label} is required.`;
+    } else if (
+      secondField.type === "address" &&
+      (tripMode === "pickup" ? !dropAddressPlaceId : !pickupAddressPlaceId)
+    ) {
+      nextErrors.secondField =
+        "Please select a full Connecticut or Massachusetts address from Google suggestions.";
+    } else if (
+      secondField.type === "address" &&
+      !allowedAddressStateCodes.has(
+        tripMode === "pickup" ? dropAddressStateCode : pickupAddressStateCode
+      )
+    ) {
+      nextErrors.secondField = "Only Connecticut and Massachusetts addresses are allowed.";
     }
 
     if (!selectedDate) {
@@ -524,7 +638,11 @@ export default function UserPage() {
         dropAddressInputRef,
         dropAutocompleteRef,
         dropBoundInputRef,
-        setDropAddress
+        (value, placeId, stateCode) => {
+          setDropAddress(value);
+          setDropAddressPlaceId(placeId);
+          setDropAddressStateCode(stateCode);
+        }
       );
       return;
     }
@@ -533,7 +651,11 @@ export default function UserPage() {
       pickupAddressInputRef,
       pickupAutocompleteRef,
       pickupBoundInputRef,
-      setPickupAddress
+      (value, placeId, stateCode) => {
+        setPickupAddress(value);
+        setPickupAddressPlaceId(placeId);
+        setPickupAddressStateCode(stateCode);
+      }
     );
   };
 
@@ -721,7 +843,10 @@ export default function UserPage() {
               <p className="text-base font-semibold leading-none text-[#17324F]">{vehicle.label}</p>
 
               <div className="mt-2 flex items-center gap-3 text-[11px] font-semibold text-[#5D7490]">
-                <span>{vehicle.passengerRange}</span>
+                <span className="inline-flex items-center gap-1">
+                  <span aria-hidden="true">👥</span>
+                  <span>{vehicle.passengerRange}</span>
+                </span>
                 <span>{vehicle.bagLimit}</span>
               </div>
 
@@ -735,7 +860,55 @@ export default function UserPage() {
     </div>
   );
 
-  const handleBookNow = () => {
+  const getRouteMetrics = async (origin: string, destination: string) => {
+    if (typeof window === "undefined") return null;
+
+    const googleWindow = window as GoogleMapsWindow;
+    const maps = googleWindow.google?.maps;
+    if (!maps?.DirectionsService) return null;
+    const DirectionsService = maps.DirectionsService;
+
+    return new Promise<{
+      distanceText: string;
+      distanceMeters: number;
+      durationText: string;
+    } | null>((resolve) => {
+      const directionsService = new DirectionsService();
+      const travelMode = maps.TravelMode?.DRIVING ?? "DRIVING";
+
+      directionsService.route(
+        {
+          origin,
+          destination,
+          travelMode,
+        },
+        (result, status) => {
+          if (status !== "OK") {
+            resolve(null);
+            return;
+          }
+
+          const leg = result?.routes?.[0]?.legs?.[0];
+          const distanceText = leg?.distance?.text ?? "";
+          const distanceMeters = leg?.distance?.value ?? 0;
+          const durationText = leg?.duration?.text ?? "";
+
+          if (!distanceText || !distanceMeters || !durationText) {
+            resolve(null);
+            return;
+          }
+
+          resolve({
+            distanceText,
+            distanceMeters,
+            durationText,
+          });
+        }
+      );
+    });
+  };
+
+  const handleBookNow = async () => {
     if (isPending || !sessionData?.session) {
       router.push("/login");
       return;
@@ -752,6 +925,18 @@ export default function UserPage() {
     const pickupIsAirport = tripMode === "pickup";
     const pickupLocation = pickupIsAirport ? pickupAirport : pickupAddress;
     const dropLocation = pickupIsAirport ? dropAddress : dropAirport;
+    const pickupRouteLocation = pickupIsAirport
+      ? airportRouteLocationByLabel[pickupAirport] ?? pickupAirport
+      : pickupAddress;
+    const dropRouteLocation = pickupIsAirport
+      ? dropAddress
+      : airportRouteLocationByLabel[dropAirport] ?? dropAirport;
+    const routeMetrics = await getRouteMetrics(pickupRouteLocation, dropRouteLocation);
+
+    if (!routeMetrics) {
+      window.alert("We could not estimate route details right now. Please verify locations and try again.");
+      return;
+    }
 
     const bookingSummary: BookingSummary = {
       tripMode,
@@ -763,6 +948,8 @@ export default function UserPage() {
       dropAirport,
       pickupAddress,
       dropAddress,
+      pickupAddressPlaceId,
+      dropAddressPlaceId,
       date: selectedDate,
       time: selectedTime,
       meridiem: selectedMeridiem,
@@ -773,6 +960,9 @@ export default function UserPage() {
       passengerRange: selectedVehicle.passengerRange,
       bagLimit: selectedVehicle.bagLimit,
       vehicleHighlights: selectedVehicle.highlights,
+      routeDistanceText: routeMetrics.distanceText,
+      routeDistanceMeters: routeMetrics.distanceMeters,
+      routeDurationText: routeMetrics.durationText,
     };
 
     window.sessionStorage.setItem(
@@ -971,8 +1161,12 @@ export default function UserPage() {
                         clearFieldError("topField");
                         if (tripMode === "pickup") {
                           setPickupAddress(event.target.value);
+                          setPickupAddressPlaceId("");
+                          setPickupAddressStateCode("");
                         } else {
                           setDropAddress(event.target.value);
+                          setDropAddressPlaceId("");
+                          setDropAddressStateCode("");
                         }
                       }}
                       placeholder={topField.placeholder}
@@ -1021,8 +1215,12 @@ export default function UserPage() {
                         clearFieldError("secondField");
                         if (tripMode === "pickup") {
                           setDropAddress(event.target.value);
+                          setDropAddressPlaceId("");
+                          setDropAddressStateCode("");
                         } else {
                           setPickupAddress(event.target.value);
+                          setPickupAddressPlaceId("");
+                          setPickupAddressStateCode("");
                         }
                       }}
                       placeholder={secondField.placeholder}
@@ -1033,7 +1231,7 @@ export default function UserPage() {
                       }`}
                     />
                     <p className="mt-2 text-xs font-normal text-[#5D7490] lg:mt-1.5">
-                      Google Places autocomplete is enabled here.
+                      Select a Connecticut or Massachusetts suggestion from Google autocomplete for accurate pricing.
                     </p>
                     {bookingErrors.secondField ? (
                       <p className="mt-1 text-xs font-medium text-[#E25555]">

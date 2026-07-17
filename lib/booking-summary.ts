@@ -12,6 +12,8 @@ export type BookingSummary = {
   dropAirport: string;
   pickupAddress: string;
   dropAddress: string;
+  pickupAddressPlaceId?: string;
+  dropAddressPlaceId?: string;
   date: string;
   time: string;
   meridiem: "AM" | "PM";
@@ -22,6 +24,28 @@ export type BookingSummary = {
   passengerRange: string;
   bagLimit: string;
   vehicleHighlights: string[];
+  routeDistanceText: string;
+  routeDistanceMeters: number;
+  routeDurationText: string;
+};
+
+type FareConfig = {
+  baseFare: number;
+  perMileRate: number;
+  minFare: number;
+};
+
+const fareConfigByVehicle: Record<VehicleType, FareConfig> = {
+  sedan: {
+    baseFare: 15,
+    perMileRate: 1.45,
+    minFare: 45,
+  },
+  suv: {
+    baseFare: 25,
+    perMileRate: 1.75,
+    minFare: 65,
+  },
 };
 
 export const bookingSummaryStorageKey = "flexigo-booking-summary";
@@ -55,4 +79,13 @@ export const formatSummaryTime = (timeValue: string, meridiem: "AM" | "PM") => {
   if (!timeValue) return "";
 
   return `${timeValue} ${meridiem}`;
+};
+
+export const metersToMiles = (meters: number) => meters / 1609.344;
+
+export const calculateFare = (vehicleType: VehicleType, distanceMeters: number) => {
+  const config = fareConfigByVehicle[vehicleType];
+  const distanceMiles = metersToMiles(distanceMeters);
+  const computedFare = config.baseFare + distanceMiles * config.perMileRate;
+  return Math.max(config.minFare, computedFare);
 };
