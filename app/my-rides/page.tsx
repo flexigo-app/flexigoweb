@@ -87,7 +87,12 @@ const formatCardDate = (dateStr: string, timeStr: string, meridiem: "AM" | "PM")
     ? "Today"
     : isSameDay(date, yesterday)
       ? "Yesterday"
-      : date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      : date.toLocaleDateString("en-US", {
+          month: "2-digit",
+          day: "2-digit",
+          year: "numeric",
+          timeZone: "UTC",
+        });
 
   return `${prefix}, ${timeStr} ${meridiem}`;
 };

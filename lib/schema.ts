@@ -23,6 +23,12 @@ export const vehicleTypeEnum = pgEnum("vehicle_type", ["sedan", "suv"]);
 
 export const userRoleEnum = pgEnum("user_role", ["user", "admin"]);
 
+export const driverStatusEnum = pgEnum("driver_status", [
+  "available",
+  "busy",
+  "offline",
+]);
+
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -120,6 +126,25 @@ export const booking = pgTable("booking", {
   driverName: text("driver_name"),
   driverAssignedAt: timestamp("driver_assigned_at"),
 
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const driver = pgTable("driver", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  phoneNumber: text("phone_number").notNull().unique(),
+  licenseNumber: text("license_number").notNull().unique(),
+  registrationNumber: text("registration_number").notNull().unique(),
+  vehicleType: vehicleTypeEnum("vehicle_type").notNull(),
+  vehicleLabel: text("vehicle_label").notNull(),
+  insurancePolicyNumber: text("insurance_policy_number").notNull(),
+  insuranceExpiryDate: text("insurance_expiry_date").notNull(),
+  profileImage: text("profile_image"),
+  status: driverStatusEnum("status").notNull().default("available"),
+  homeCity: text("home_city").notNull(),
+  notes: text("notes"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

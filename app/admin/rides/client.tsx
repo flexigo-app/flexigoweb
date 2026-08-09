@@ -1,11 +1,8 @@
 "use client";
 
-import { Montserrat } from "next/font/google";
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { formatSummaryDate, formatSummaryTime } from "@/lib/booking-summary";
-
-const montserrat = Montserrat({ subsets: ["latin"], weight: ["700"], style: ["italic"] });
+import { formatSummaryDate, formatSummaryTime, formatUsDateTime } from "@/lib/booking-summary";
+import { AdminShell } from "../_components/admin-shell";
 
 type BookingStatus = "pending" | "confirmed" | "paid" | "assigned" | "completed" | "cancelled";
 
@@ -111,27 +108,12 @@ export function AdminRidesClient() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-100">
-      {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white shadow-sm">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-4">
-            <Link href="/admin/rides" className={`${montserrat.className} text-2xl font-bold italic text-[#1A6FD4]`}>
-              FlexiGo
-            </Link>
-            <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-red-700">
-              Admin
-            </span>
-          </div>
-          <nav className="flex items-center gap-6">
-            <Link href="/admin/rides" className="text-sm font-semibold text-[#1A6FD4]">Rides</Link>
-            <Link href="/user" className="text-sm font-medium text-slate-500 hover:text-slate-800">← User view</Link>
-          </nav>
-        </div>
-      </header>
-
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        {/* Page title + stat pills */}
+    <AdminShell
+      activeHref="/admin/rides"
+      title="Ride Command Center"
+      subtitle="Review, approve, assign and manage all ride requests"
+      showBackButton
+    >
         <div className="mb-6">
           <h1 className="text-2xl font-extrabold text-slate-900">Ride Command Center</h1>
           <p className="mt-1 text-sm text-slate-500">Review, approve, assign and manage all ride requests</p>
@@ -203,7 +185,7 @@ export function AdminRidesClient() {
                       </span>
                       <span className="font-mono text-xs font-bold text-slate-500">{ride.confirmationId}</span>
                     </div>
-                    <span className="text-xs text-slate-400">{new Date(ride.createdAt).toLocaleString()}</span>
+                    <span className="text-xs text-slate-400">{formatUsDateTime(ride.createdAt)}</span>
                   </div>
 
                   <div className="grid gap-4 p-5 sm:grid-cols-[1fr_auto]">
@@ -351,7 +333,6 @@ export function AdminRidesClient() {
             })}
           </div>
         )}
-      </div>
-    </main>
+    </AdminShell>
   );
 }

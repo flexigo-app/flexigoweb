@@ -67,18 +67,35 @@ export const formatSummaryDate = (dateValue: string) => {
   if (!dateValue) return "";
 
   const date = new Date(`${dateValue}T00:00:00`);
-  const month = new Intl.DateTimeFormat("en-US", { month: "long" }).format(date);
-  const day = new Intl.DateTimeFormat("en-US", { day: "numeric" }).format(date);
-  const year = new Intl.DateTimeFormat("en-US", { year: "numeric" }).format(date);
-  const weekday = new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(date);
-
-  return `${month} ${day}, ${year} (${weekday})`;
+  return new Intl.DateTimeFormat("en-US", {
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(date);
 };
 
 export const formatSummaryTime = (timeValue: string, meridiem: "AM" | "PM") => {
   if (!timeValue) return "";
 
   return `${timeValue} ${meridiem}`;
+};
+
+export const formatUsDateTime = (value: string) => {
+  if (!value) return "";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "UTC",
+  }).format(date);
 };
 
 export const metersToMiles = (meters: number) => meters / 1609.344;

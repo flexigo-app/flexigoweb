@@ -33,11 +33,26 @@ export default function LoginPage() {
         // Sign out first to clear better-auth session
         await authClient.signOut();
 
-        // Small delay to ensure session is cleared
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Ask Better Auth for the provider URL and force account chooser.
+        const result = await authClient.signIn.social({
+          provider: "google",
+          callbackURL: "/user",
+          disableRedirect: true,
+        });
 
-        // Reload to get fresh login page
-        window.location.href = "/login";
+        const providerUrl = result?.data?.url;
+        if (providerUrl) {
+          const url = new URL(providerUrl);
+          url.searchParams.set("prompt", "select_account");
+          window.location.href = url.toString();
+          return;
+        }
+
+        // Fallback to standard flow if URL extraction fails.
+        await authClient.signIn.social({
+          provider: "google",
+          callbackURL: "/user",
+        });
         return;
       }
 

@@ -1,5 +1,7 @@
-import { redirect } from "next/navigation";
+import { requireAdminOrRedirect } from "@/lib/admin-auth";
+import { AdminDashboardClient } from "./client";
 
-export default function AdminPage() {
-  redirect("/admin/rides");
+export default async function AdminPage() {
+  await requireAdminOrRedirect();
+  return <AdminDashboardClient />;
 }
