@@ -23,25 +23,35 @@ const formatRideTypeLabel = (vehicleLabel: string) => vehicleLabel;
 
 export default function RideSummaryPage() {
   const router = useRouter();
-  const [bookingSummary] = useState<BookingSummary | null>(() => {
-    if (typeof window === "undefined") return null;
-
-    const storedSummary = window.sessionStorage.getItem(bookingSummaryStorageKey);
-    if (!storedSummary) return null;
-
-    try {
-      return JSON.parse(storedSummary) as BookingSummary;
-    } catch {
-      return null;
-    }
-  });
-  const [hasConfirmed, setHasConfirmed] = useState(false);
+  const [bookingSummary, setBookingSummary] = useState<BookingSummary | null>(null);
+  const [isSummaryReady, setIsSummaryReady] = useState(false);
+  const [confirmationId, setConfirmationId] = useState<string | null>(null);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
 
   useEffect(() => {
-    if (!bookingSummary) {
+    const storedSummary = window.sessionStorage.getItem(bookingSummaryStorageKey);
+    if (!storedSummary) {
+      setIsSummaryReady(true);
+      router.replace("/user");
+      return;
+    }
+
+    try {
+      setBookingSummary(JSON.parse(storedSummary) as BookingSummary);
+    } catch {
+      router.replace("/user");
+    } finally {
+      setIsSummaryReady(true);
+    }
+  }, [router]);
+
+  useEffect(() => {
+    if (isSummaryReady && !bookingSummary) {
       router.replace("/user");
     }
-  }, [bookingSummary, router]);
+  }, [bookingSummary, isSummaryReady, router]);
 
   const summaryDate = useMemo(
     () => formatSummaryDate(bookingSummary?.date || ""),
@@ -64,10 +74,44 @@ export default function RideSummaryPage() {
     [bookingSummary]
   );
 
+  const handleRequestRide = async () => {
+    if (!bookingSummary || isConfirming || confirmationId) return;
+    setIsConfirming(true);
+    setConfirmError(null);
+
+    try {
+      const response = await fetch("/api/bookings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(bookingSummary),
+      });
+
+      if (!response.ok) {
+        const err = (await response.json()) as { message?: string };
+        setConfirmError(err.message ?? "Booking failed. Please try again.");
+        return;
+      }
+
+      const data = (await response.json()) as { confirmationId: string };
+      setConfirmationId(data.confirmationId);
+      window.sessionStorage.removeItem("flexigo-booking-summary");
+      router.push("/my-rides");
+    } catch {
+      setConfirmError("Network error. Please try again.");
+    } finally {
+      setIsConfirming(false);
+    }
+  };
+
+  const handleRequestRideClick = () => {
+    if (isConfirming || confirmationId) return;
+    setIsRequestModalOpen(true);
+  };
+
   const pickupIsAirport = bookingSummary ? bookingSummary.tripMode === "pickup" : false;
   const dropIsAirport = bookingSummary ? bookingSummary.tripMode === "drop" : false;
 
-  if (!bookingSummary) {
+  if (!isSummaryReady || !bookingSummary) {
     return (
       <main className="min-h-screen bg-[#EAF6FF] px-4 py-10 text-[#17324F]">
         <div className="mx-auto flex min-h-[70vh] max-w-2xl items-center justify-center rounded-3xl border border-[#D8ECFF] bg-white p-8 shadow-sm">
@@ -293,10 +337,11 @@ export default function RideSummaryPage() {
             <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
               <button
                 type="button"
-                onClick={() => setHasConfirmed(true)}
-                className="inline-flex h-14 w-full items-center justify-center rounded-full bg-gradient-to-r from-[#0B83E9] via-[#1A8AF4] to-[#38B6FF] px-6 text-lg font-bold text-white shadow-[0_14px_32px_rgba(56,182,255,0.28)] transition hover:brightness-105 sm:w-auto sm:min-w-[240px]"
+                onClick={handleRequestRideClick}
+                disabled={isConfirming || !!confirmationId}
+                className="inline-flex h-14 w-full items-center justify-center rounded-full bg-gradient-to-r from-[#0B83E9] via-[#1A8AF4] to-[#38B6FF] px-6 text-lg font-bold text-white shadow-[0_14px_32px_rgba(56,182,255,0.28)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto sm:min-w-[240px]"
               >
-                Confirm Ride
+                {isConfirming ? "Requesting..." : confirmationId ? "Requested ✓" : "Request Ride"}
               </button>
               <Link
                 href="/user"
@@ -306,9 +351,49 @@ export default function RideSummaryPage() {
               </Link>
             </div>
 
-            {hasConfirmed ? (
-              <div className="mt-4 rounded-2xl border border-[#CDE8D0] bg-[#F2FAF4] px-4 py-3 text-sm font-semibold text-[#2D7C55]">
-                Ride confirmed locally. Booking persistence will be added later.
+            {isRequestModalOpen ? (
+              <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[#0B2038]/55 px-4">
+                <div className="w-full max-w-md rounded-3xl border border-[#D6E8FA] bg-white p-6 shadow-[0_30px_80px_rgba(16,42,67,0.35)]">
+                  <h3 className="text-xl font-extrabold text-[#102A43]">Raise Ride Request</h3>
+                  <p className="mt-2 text-sm font-medium text-[#55687F]">
+                    Are you sure you want to raise a ride request?
+                  </p>
+                  <div className="mt-5 flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setIsRequestModalOpen(false)}
+                      className="inline-flex h-11 flex-1 items-center justify-center rounded-full border border-[#CFE3FF] bg-white px-4 text-sm font-bold text-[#1567D9] hover:bg-[#F4F9FF]"
+                    >
+                      No
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setIsRequestModalOpen(false);
+                        await handleRequestRide();
+                      }}
+                      className="inline-flex h-11 flex-1 items-center justify-center rounded-full bg-gradient-to-r from-[#0B83E9] to-[#38B6FF] px-4 text-sm font-bold text-white hover:brightness-105"
+                    >
+                      Yes
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {confirmationId ? (
+              <div className="mt-4 rounded-2xl border border-[#CDE8D0] bg-[#F2FAF4] px-5 py-4">
+                <p className="text-sm font-bold text-[#2D7C55]">Ride Requested!</p>
+                <p className="mt-1 text-sm text-[#3A7A5A]">
+                  Your confirmation ID is{" "}
+                  <span className="font-mono font-bold tracking-wide">{confirmationId}</span>.
+                  Save this for your records.
+                </p>
+              </div>
+            ) : null}
+            {confirmError ? (
+              <div className="mt-4 rounded-2xl border border-[#F5CBCB] bg-[#FFF5F5] px-5 py-4 text-sm font-semibold text-[#C0392B]">
+                {confirmError}
               </div>
             ) : null}
           </div>

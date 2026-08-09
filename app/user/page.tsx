@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Montserrat } from "next/font/google";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import {
   bookingSummaryStorageKey,
@@ -30,12 +30,16 @@ type BookingErrorState = {
   selectedVehicleType?: string;
 };
 
+type AddressSuggestion = {
+  placeId: string;
+  formattedAddress: string;
+  stateCode: string;
+};
+
 type GooglePlacesAutocompletePlace = {
   formatted_address?: string;
-  name?: string;
   place_id?: string;
   address_components?: Array<{
-    long_name?: string;
     short_name?: string;
     types?: string[];
   }>;
@@ -59,42 +63,10 @@ type GooglePlacesApi = {
   ) => GooglePlacesAutocompleteInstance;
 };
 
-type GoogleMapsDirectionsLeg = {
-  distance?: {
-    text?: string;
-    value?: number;
-  };
-  duration?: {
-    text?: string;
-    value?: number;
-  };
-};
-
-type GoogleMapsDirectionsResult = {
-  routes?: Array<{
-    legs?: GoogleMapsDirectionsLeg[];
-  }>;
-};
-
-type GoogleMapsDirectionsService = {
-  route: (
-    request: {
-      origin: string;
-      destination: string;
-      travelMode: string;
-    },
-    callback: (result: GoogleMapsDirectionsResult | null, status: string) => void
-  ) => void;
-};
-
 type GoogleMapsWindow = Window & {
   google?: {
     maps?: {
       places?: GooglePlacesApi;
-      DirectionsService?: new () => GoogleMapsDirectionsService;
-      TravelMode?: {
-        DRIVING: string;
-      };
     };
   };
 };
@@ -190,6 +162,7 @@ export default function UserPage() {
   const [isAirportMenuOpen, setIsAirportMenuOpen] = useState(false);
   const [isPassengerMenuOpen, setIsPassengerMenuOpen] = useState(false);
   const [isPlacesScriptLoaded, setIsPlacesScriptLoaded] = useState(false);
+  const [useGooglePlacesFallback, setUseGooglePlacesFallback] = useState(false);
   const [pickupAirport, setPickupAirport] = useState(
     bookingDefaults?.pickupAirport ?? airportOptions[0]
   );
@@ -219,7 +192,18 @@ export default function UserPage() {
   );
   const [pickupAddressStateCode, setPickupAddressStateCode] = useState("");
   const [dropAddressStateCode, setDropAddressStateCode] = useState("");
+  const [pickupSuggestions, setPickupSuggestions] = useState<AddressSuggestion[]>([]);
+  const [dropSuggestions, setDropSuggestions] = useState<AddressSuggestion[]>([]);
+  const [isPickupSuggestionsOpen, setIsPickupSuggestionsOpen] = useState(false);
+  const [isDropSuggestionsOpen, setIsDropSuggestionsOpen] = useState(false);
+  const [pickupSuggestionsLoading, setPickupSuggestionsLoading] = useState(false);
+  const [dropSuggestionsLoading, setDropSuggestionsLoading] = useState(false);
   const [bookingErrors, setBookingErrors] = useState<BookingErrorState>({});
+  const [recentBookings, setRecentBookings] = useState<any[]>([]);
+  const [isLoadingBookings, setIsLoadingBookings] = useState(false);
+  const [dismissedFinalBookings, setDismissedFinalBookings] = useState<Set<string>>(
+    new Set()
+  );
 
   const menuRef = useRef<HTMLDivElement | null>(null);
   const airportPickerRef = useRef<HTMLDivElement | null>(null);
@@ -245,6 +229,56 @@ export default function UserPage() {
       router.replace("/login");
     }
   }, [isPending, router, sessionData]);
+
+  // Fetch recent bookings for notifications
+  useEffect(() => {
+    if (!sessionData?.session) return;
+
+    const fetchBookings = async () => {
+      setIsLoadingBookings(true);
+      try {
+        const response = await fetch("/api/bookings");
+        if (response.ok) {
+          const bookings = (await response.json()) as any[];
+          // Get the 6 most recent bookings (sorted by createdAt descending)
+          setRecentBookings(bookings.slice(0, 6));
+        }
+      } catch (error) {
+        console.error("Failed to fetch bookings:", error);
+      } finally {
+        setIsLoadingBookings(false);
+      }
+    };
+
+    fetchBookings();
+    // Refetch bookings every 30 seconds
+    const interval = setInterval(fetchBookings, 30000);
+    return () => clearInterval(interval);
+  }, [sessionData?.session]);
+
+  // Auto-dismiss completed/cancelled bookings after 5 seconds
+  useEffect(() => {
+    const finalStatuses = ["completed", "cancelled"];
+    const timers: NodeJS.Timeout[] = [];
+
+    recentBookings.forEach((booking) => {
+      if (
+        finalStatuses.includes(booking.status.toLowerCase()) &&
+        !dismissedFinalBookings.has(booking.id)
+      ) {
+        const timer = setTimeout(() => {
+          setDismissedFinalBookings((prev) => {
+            const updated = new Set(prev);
+            updated.add(booking.id);
+            return updated;
+          });
+        }, 5000);
+        timers.push(timer);
+      }
+    });
+
+    return () => timers.forEach((timer) => clearTimeout(timer));
+  }, [recentBookings, dismissedFinalBookings]);
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent | TouchEvent) => {
@@ -291,113 +325,115 @@ export default function UserPage() {
   useEffect(() => {
     if (!googleMapsApiKey || typeof window === "undefined") return;
 
-    const handleScriptReady = () => {
-      setIsPlacesScriptLoaded(true);
-    };
-
     const googleWindow = window as GoogleMapsWindow;
-
     if (googleWindow.google?.maps?.places) {
-      queueMicrotask(() => {
-        setIsPlacesScriptLoaded(true);
-      });
+      setIsPlacesScriptLoaded(true);
       return;
     }
 
-    const existingScript = document.querySelector<HTMLScriptElement>(
-      'script[data-google-maps-places="true"]'
-    );
-
-    if (existingScript) {
-      existingScript.addEventListener("load", handleScriptReady);
-      return () => {
-        existingScript.removeEventListener("load", handleScriptReady);
-      };
-    }
-
-    const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(
+    const placesScriptSrc = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(
       googleMapsApiKey
     )}&libraries=places`;
-    script.async = true;
-    script.defer = true;
-    script.dataset.googleMapsPlaces = "true";
-    script.addEventListener("load", handleScriptReady);
-    document.head.appendChild(script);
 
+    let script = document.querySelector<HTMLScriptElement>(
+      'script[data-google-maps-places="true"][src*="libraries=places"]'
+    );
+
+    const onLoad = () => {
+      setIsPlacesScriptLoaded(true);
+      if (script) {
+        script.dataset.loaded = "true";
+      }
+    };
+
+    if (!script) {
+      script = document.createElement("script");
+      script.src = placesScriptSrc;
+      script.async = true;
+      script.defer = true;
+      script.dataset.googleMapsPlaces = "true";
+      document.head.appendChild(script);
+    }
+
+    if (script.dataset.loaded === "true") {
+      setIsPlacesScriptLoaded(true);
+      return;
+    }
+
+    script.addEventListener("load", onLoad);
     return () => {
-      script.removeEventListener("load", handleScriptReady);
+      script?.removeEventListener("load", onLoad);
     };
   }, []);
 
-  const bindPlacesAutocomplete = useCallback(
-    (
+  useEffect(() => {
+    if (!useGooglePlacesFallback || !isPlacesScriptLoaded) return;
+
+    const googleWindow = window as GoogleMapsWindow;
+    const places = googleWindow.google?.maps?.places;
+    if (!places) return;
+
+    const bindAutocomplete = (
       inputRef: { current: HTMLInputElement | null },
       autocompleteRef: { current: GooglePlacesAutocompleteInstance | null },
       boundInputRef: { current: HTMLInputElement | null },
-      onAddressSelect: (value: string, placeId: string, stateCode: string) => void
+      side: "pickup" | "drop"
     ) => {
-    const googleWindow = window as GoogleMapsWindow;
-    const places = googleWindow.google?.maps?.places;
-    const input = inputRef.current;
+      const input = inputRef.current;
+      if (!input || boundInputRef.current === input) return;
 
-    if (!places || !input || boundInputRef.current === input) return;
+      const autocomplete = new places.Autocomplete(input, {
+        fields: ["formatted_address", "place_id", "address_components"],
+        types: ["address"],
+        componentRestrictions: { country: "us" },
+      });
 
-    const autocomplete = new places.Autocomplete(input, {
-      fields: ["formatted_address", "name", "place_id", "address_components"],
-      types: ["address"],
-      componentRestrictions: { country: "us" },
-    });
+      autocomplete.addListener("place_changed", () => {
+        const place = autocomplete.getPlace();
+        const formattedAddress = place?.formatted_address || "";
+        const placeId = place?.place_id || "";
+        const stateCode =
+          place?.address_components
+            ?.find((component) => component.types?.includes("administrative_area_level_1"))
+            ?.short_name || "";
 
-    autocomplete.addListener("place_changed", () => {
-      const place = autocomplete.getPlace();
-      const formattedAddress = place?.formatted_address || "";
-      const placeId = place?.place_id || "";
-      const stateCode =
-        place?.address_components
-          ?.find((component) => component.types?.includes("administrative_area_level_1"))
-          ?.short_name || "";
+        if (!formattedAddress || !placeId) return;
 
-      if (!formattedAddress || !placeId) return;
+        if (side === "pickup") {
+          setPickupAddress(formattedAddress);
+          setPickupAddressPlaceId(
+            allowedAddressStateCodes.has(stateCode) ? placeId : ""
+          );
+          setPickupAddressStateCode(stateCode);
+          clearFieldError("topField");
+          setIsPickupSuggestionsOpen(false);
+          return;
+        }
 
-      if (!allowedAddressStateCodes.has(stateCode)) {
-        onAddressSelect(formattedAddress, "", stateCode);
-        return;
-      }
+        setDropAddress(formattedAddress);
+        setDropAddressPlaceId(allowedAddressStateCodes.has(stateCode) ? placeId : "");
+        setDropAddressStateCode(stateCode);
+        clearFieldError("secondField");
+        setIsDropSuggestionsOpen(false);
+      });
 
-      onAddressSelect(formattedAddress, placeId, stateCode);
-    });
+      autocompleteRef.current = autocomplete;
+      boundInputRef.current = input;
+    };
 
-    autocompleteRef.current = autocomplete;
-    boundInputRef.current = input;
-    },
-    []
-  );
-
-  useEffect(() => {
-    if (!isPlacesScriptLoaded) return;
-
-    bindPlacesAutocomplete(
+    bindAutocomplete(
       pickupAddressInputRef,
       pickupAutocompleteRef,
       pickupBoundInputRef,
-      (value, placeId, stateCode) => {
-        setPickupAddress(value);
-        setPickupAddressPlaceId(placeId);
-        setPickupAddressStateCode(stateCode);
-      }
+      "pickup"
     );
-    bindPlacesAutocomplete(
+    bindAutocomplete(
       dropAddressInputRef,
       dropAutocompleteRef,
       dropBoundInputRef,
-      (value, placeId, stateCode) => {
-        setDropAddress(value);
-        setDropAddressPlaceId(placeId);
-        setDropAddressStateCode(stateCode);
-      }
+      "drop"
     );
-  }, [isPlacesScriptLoaded, bindPlacesAutocomplete]);
+  }, [useGooglePlacesFallback, isPlacesScriptLoaded]);
 
   const userName = useMemo(() => sessionData?.user?.name || "Traveler", [sessionData]);
 
@@ -408,6 +444,74 @@ export default function UserPage() {
     if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
     return `${parts[0].slice(0, 1)}${parts[1].slice(0, 1)}`.toUpperCase();
   }, [sessionData]);
+
+  const getNotificationMessage = (booking: any) => {
+    const status = booking.status as string;
+    const tripMode = booking.tripMode as string;
+    const pickupLocation = tripMode === "pickup" ? booking.pickupLocation : booking.dropLocation;
+    const dropLocation = tripMode === "pickup" ? booking.dropLocation : booking.pickupLocation;
+    const pickupIcon = tripMode === "pickup" ? "✈️" : "📍";
+    const dropIcon = tripMode === "pickup" ? "📍" : "✈️";
+    const fare = booking.totalFareCents ? `$${(booking.totalFareCents / 100).toFixed(2)}` : null;
+
+    let statusBadge = "bg-gray-100 text-gray-700";
+    let actionText = "View Details";
+    let actionColor = "bg-slate-600 hover:bg-slate-700";
+    let statusLabel = "PENDING";
+
+    switch (status) {
+      case "pending":
+        statusBadge = "bg-yellow-100 text-yellow-700";
+        statusLabel = "PENDING";
+        actionText = "Awaiting Approval";
+        actionColor = "bg-yellow-600 hover:bg-yellow-700";
+        break;
+      case "confirmed":
+        statusBadge = "bg-green-100 text-green-700";
+        statusLabel = "APPROVED";
+        actionText = `PAY ${fare || "Now"}`;
+        actionColor = "bg-green-600 hover:bg-green-700";
+        break;
+      case "paid":
+        statusBadge = "bg-blue-100 text-blue-700";
+        statusLabel = "PAID";
+        actionText = "Assigning Driver";
+        actionColor = "bg-blue-600 hover:bg-blue-700";
+        break;
+      case "assigned":
+        statusBadge = "bg-cyan-100 text-cyan-700";
+        statusLabel = "EN ROUTE";
+        actionText = `TRACK ${booking.driverName?.split(" ")[0] || "Driver"}`;
+        actionColor = "bg-cyan-600 hover:bg-cyan-700";
+        break;
+      case "completed":
+        statusBadge = "bg-purple-100 text-purple-700";
+        statusLabel = "COMPLETED";
+        actionText = "RATE RIDE";
+        actionColor = "bg-purple-600 hover:bg-purple-700";
+        break;
+      case "cancelled":
+        statusBadge = "bg-red-100 text-red-700";
+        statusLabel = "CANCELLED";
+        actionText = "BOOK AGAIN";
+        actionColor = "bg-red-600 hover:bg-red-700";
+        break;
+      default:
+        statusLabel = "UPDATE";
+    }
+
+    return {
+      pickupLocation,
+      dropLocation,
+      pickupIcon,
+      dropIcon,
+      statusBadge,
+      statusLabel,
+      actionText,
+      actionColor,
+      fare,
+    };
+  };
 
   const handleSignOut = async () => {
     setIsSigningOut(true);
@@ -476,6 +580,114 @@ export default function UserPage() {
     }));
   };
 
+  const handleAddressSuggestionSelect = (
+    side: "pickup" | "drop",
+    suggestion: AddressSuggestion,
+    errorKey: keyof BookingErrorState
+  ) => {
+    if (side === "pickup") {
+      setPickupAddress(suggestion.formattedAddress);
+      setPickupAddressPlaceId(suggestion.placeId);
+      setPickupAddressStateCode(suggestion.stateCode);
+      setPickupSuggestions([]);
+      setIsPickupSuggestionsOpen(false);
+    } else {
+      setDropAddress(suggestion.formattedAddress);
+      setDropAddressPlaceId(suggestion.placeId);
+      setDropAddressStateCode(suggestion.stateCode);
+      setDropSuggestions([]);
+      setIsDropSuggestionsOpen(false);
+    }
+
+    clearFieldError(errorKey);
+  };
+
+  useEffect(() => {
+    if (pickupAddressPlaceId || pickupAddress.trim().length < 3) {
+      setPickupSuggestions([]);
+      setPickupSuggestionsLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(async () => {
+      setPickupSuggestionsLoading(true);
+      try {
+        const response = await fetch(
+          `/api/places/autocomplete?input=${encodeURIComponent(pickupAddress.trim())}`,
+          { signal: controller.signal }
+        );
+        if (!response.ok) {
+          setPickupSuggestions([]);
+          return;
+        }
+
+        const data = (await response.json()) as {
+          suggestions?: AddressSuggestion[];
+          status?: string;
+        };
+        if (data.status && data.status !== "OK" && data.status !== "ZERO_RESULTS") {
+          setUseGooglePlacesFallback(true);
+          setPickupSuggestions([]);
+          return;
+        }
+        setPickupSuggestions(data.suggestions ?? []);
+      } catch {
+        setPickupSuggestions([]);
+      } finally {
+        setPickupSuggestionsLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
+  }, [pickupAddress, pickupAddressPlaceId]);
+
+  useEffect(() => {
+    if (dropAddressPlaceId || dropAddress.trim().length < 3) {
+      setDropSuggestions([]);
+      setDropSuggestionsLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(async () => {
+      setDropSuggestionsLoading(true);
+      try {
+        const response = await fetch(
+          `/api/places/autocomplete?input=${encodeURIComponent(dropAddress.trim())}`,
+          { signal: controller.signal }
+        );
+        if (!response.ok) {
+          setDropSuggestions([]);
+          return;
+        }
+
+        const data = (await response.json()) as {
+          suggestions?: AddressSuggestion[];
+          status?: string;
+        };
+        if (data.status && data.status !== "OK" && data.status !== "ZERO_RESULTS") {
+          setUseGooglePlacesFallback(true);
+          setDropSuggestions([]);
+          return;
+        }
+        setDropSuggestions(data.suggestions ?? []);
+      } catch {
+        setDropSuggestions([]);
+      } finally {
+        setDropSuggestionsLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
+  }, [dropAddress, dropAddressPlaceId]);
+
   const scrollAndFocusElement = (
     targetRef: HTMLElement | null,
     focusTarget?: HTMLElement | null
@@ -506,32 +718,26 @@ export default function UserPage() {
         ? tripMode === "pickup"
           ? pickupAirport
           : dropAirport
-        : tripMode === "pickup"
-          ? pickupAddress
-          : dropAddress;
+        : pickupAddress;
 
     const secondFieldValue =
       secondField.type === "airport"
         ? tripMode === "pickup"
           ? dropAirport
           : pickupAirport
-        : tripMode === "pickup"
-          ? dropAddress
-          : pickupAddress;
+        : dropAddress;
 
     if (!topFieldValue.trim()) {
       nextErrors.topField = `${topField.label} is required.`;
     } else if (
       topField.type === "address" &&
-      (tripMode === "pickup" ? !pickupAddressPlaceId : !dropAddressPlaceId)
+      !pickupAddressPlaceId
     ) {
       nextErrors.topField =
         "Please select a full Connecticut or Massachusetts address from Google suggestions.";
     } else if (
       topField.type === "address" &&
-      !allowedAddressStateCodes.has(
-        tripMode === "pickup" ? pickupAddressStateCode : dropAddressStateCode
-      )
+      !allowedAddressStateCodes.has(pickupAddressStateCode)
     ) {
       nextErrors.topField = "Only Connecticut and Massachusetts addresses are allowed.";
     }
@@ -540,15 +746,13 @@ export default function UserPage() {
       nextErrors.secondField = `${secondField.label} is required.`;
     } else if (
       secondField.type === "address" &&
-      (tripMode === "pickup" ? !dropAddressPlaceId : !pickupAddressPlaceId)
+      !dropAddressPlaceId
     ) {
       nextErrors.secondField =
         "Please select a full Connecticut or Massachusetts address from Google suggestions.";
     } else if (
       secondField.type === "address" &&
-      !allowedAddressStateCodes.has(
-        tripMode === "pickup" ? dropAddressStateCode : pickupAddressStateCode
-      )
+      !allowedAddressStateCodes.has(dropAddressStateCode)
     ) {
       nextErrors.secondField = "Only Connecticut and Massachusetts addresses are allowed.";
     }
@@ -632,30 +836,40 @@ export default function UserPage() {
     return true;
   };
 
-  const handleAddressFocus = (side: TripMode) => {
-    if (side === "pickup") {
-      bindPlacesAutocomplete(
-        dropAddressInputRef,
-        dropAutocompleteRef,
-        dropBoundInputRef,
-        (value, placeId, stateCode) => {
-          setDropAddress(value);
-          setDropAddressPlaceId(placeId);
-          setDropAddressStateCode(stateCode);
-        }
-      );
-      return;
-    }
+  const renderAddressSuggestions = (
+    suggestions: AddressSuggestion[],
+    isOpen: boolean,
+    isLoading: boolean,
+    onSelect: (suggestion: AddressSuggestion) => void
+  ) => {
+    if (useGooglePlacesFallback) return null;
+    if (!isOpen) return null;
 
-    bindPlacesAutocomplete(
-      pickupAddressInputRef,
-      pickupAutocompleteRef,
-      pickupBoundInputRef,
-      (value, placeId, stateCode) => {
-        setPickupAddress(value);
-        setPickupAddressPlaceId(placeId);
-        setPickupAddressStateCode(stateCode);
-      }
+    return (
+      <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-50 max-h-64 overflow-y-auto rounded-2xl border border-[#BFE5FF] bg-white shadow-2xl">
+        {isLoading ? (
+          <p className="px-4 py-3 text-sm text-[#5D7490]">Loading suggestions...</p>
+        ) : suggestions.length === 0 ? (
+          <p className="px-4 py-3 text-sm text-[#5D7490]">
+            No Connecticut or Massachusetts addresses found.
+          </p>
+        ) : (
+          suggestions.map((suggestion) => (
+            <button
+              key={suggestion.placeId}
+              type="button"
+              onPointerDown={(event) => {
+                event.preventDefault();
+                onSelect(suggestion);
+              }}
+              className="flex w-full items-center justify-between px-4 py-3 text-left text-sm text-[#17324F] transition hover:bg-[#EAF6FF]"
+            >
+              <span className="pr-3">{suggestion.formattedAddress}</span>
+              <span className="text-xs font-semibold text-[#5D7490]">{suggestion.stateCode}</span>
+            </button>
+          ))
+        )}
+      </div>
     );
   };
 
@@ -765,27 +979,36 @@ export default function UserPage() {
           {passengerOptions.map((count) => {
             const value = String(count);
             const isActive = value === selectedPassengerCount;
+            const isDisabled = selectedVehicleType === "sedan" && count > 4;
 
             return (
               <button
                 key={count}
                 type="button"
+                disabled={isDisabled}
                 onPointerDown={(event) => {
                   event.preventDefault();
+                  if (isDisabled) return;
                   setSelectedPassengerCount(value);
                   setIsPassengerMenuOpen(false);
                   clearFieldError("selectedPassengerCount");
                 }}
-                className={`flex w-full items-center justify-between px-4 py-3 text-left text-sm transition hover:bg-[#EAF6FF] ${
-                  isActive
-                    ? "bg-[#EAF6FF] font-semibold text-[#0E4A78]"
-                    : "text-[#17324F]"
+                className={`flex w-full items-center justify-between px-4 py-3 text-left text-sm transition ${
+                  isDisabled
+                    ? "cursor-not-allowed opacity-35"
+                    : isActive
+                      ? "bg-[#EAF6FF] font-semibold text-[#0E4A78]"
+                      : "text-[#17324F] hover:bg-[#EAF6FF]"
                 }`}
               >
                 <span>
                   {count} passenger{count > 1 ? "s" : ""}
                 </span>
-                {isActive ? <span className="text-[#38B6FF]">✓</span> : null}
+                {isDisabled ? (
+                  <span className="text-xs text-[#9BB0C5]">SUV only</span>
+                ) : isActive ? (
+                  <span className="text-[#38B6FF]">✓</span>
+                ) : null}
               </button>
             );
           })}
@@ -805,6 +1028,9 @@ export default function UserPage() {
             type="button"
             onClick={() => {
               setSelectedVehicleType(vehicle.id);
+              if (vehicle.id === "sedan" && Number(selectedPassengerCount) > 4) {
+                setSelectedPassengerCount("4");
+              }
               clearFieldError("selectedVehicleType");
             }}
             className={`group relative overflow-hidden rounded-2xl border bg-white text-left transition focus:outline-none focus:ring-4 focus:ring-[#38B6FF]/15 ${
@@ -861,51 +1087,31 @@ export default function UserPage() {
   );
 
   const getRouteMetrics = async (origin: string, destination: string) => {
-    if (typeof window === "undefined") return null;
+    try {
+      const response = await fetch("/api/routes/compute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ origin, destination }),
+      });
 
-    const googleWindow = window as GoogleMapsWindow;
-    const maps = googleWindow.google?.maps;
-    if (!maps?.DirectionsService) return null;
-    const DirectionsService = maps.DirectionsService;
+      if (!response.ok) return null;
 
-    return new Promise<{
-      distanceText: string;
-      distanceMeters: number;
-      durationText: string;
-    } | null>((resolve) => {
-      const directionsService = new DirectionsService();
-      const travelMode = maps.TravelMode?.DRIVING ?? "DRIVING";
+      const data = (await response.json()) as {
+        distanceMeters?: number;
+        distanceText?: string;
+        durationText?: string;
+      };
 
-      directionsService.route(
-        {
-          origin,
-          destination,
-          travelMode,
-        },
-        (result, status) => {
-          if (status !== "OK") {
-            resolve(null);
-            return;
-          }
+      if (!data.distanceMeters || !data.distanceText || !data.durationText) return null;
 
-          const leg = result?.routes?.[0]?.legs?.[0];
-          const distanceText = leg?.distance?.text ?? "";
-          const distanceMeters = leg?.distance?.value ?? 0;
-          const durationText = leg?.duration?.text ?? "";
-
-          if (!distanceText || !distanceMeters || !durationText) {
-            resolve(null);
-            return;
-          }
-
-          resolve({
-            distanceText,
-            distanceMeters,
-            durationText,
-          });
-        }
-      );
-    });
+      return {
+        distanceMeters: data.distanceMeters,
+        distanceText: data.distanceText,
+        durationText: data.durationText,
+      };
+    } catch {
+      return null;
+    }
   };
 
   const handleBookNow = async () => {
@@ -1035,12 +1241,13 @@ export default function UserPage() {
                   >
                     Dashboard
                   </Link>
-                  <button
-                    type="button"
-                    className="rounded-xl px-3 py-2 text-left text-sm font-semibold text-[#17324F] transition hover:bg-[#EAF6FF]"
+                  <Link
+                    href="/my-rides"
+                    onClick={() => setIsMenuOpen(false)}
+                    className="rounded-xl px-3 py-2 text-sm font-semibold text-[#17324F] transition hover:bg-[#EAF6FF]"
                   >
                     My Rides
-                  </button>
+                  </Link>
                   <button
                     type="button"
                     className="rounded-xl px-3 py-2 text-left text-sm font-semibold text-[#17324F] transition hover:bg-[#EAF6FF]"
@@ -1097,6 +1304,84 @@ export default function UserPage() {
             </span>
           </button>
 
+          {/* Ride Status Updates / Notifications - Horizontal Scrollable */}
+          {(() => {
+            const activeStatuses = [
+              "pending",
+              "approved",
+              "confirmed",
+              "paid",
+              "assigned",
+            ];
+            const displayedBookings = recentBookings.filter((booking) => {
+              const status = booking.status.toLowerCase();
+              if (activeStatuses.includes(status)) return true;
+              if (
+                ["completed", "cancelled"].includes(status) &&
+                !dismissedFinalBookings.has(booking.id)
+              ) {
+                return true;
+              }
+              return false;
+            });
+
+            return displayedBookings.length > 0 ? (
+              <div className="mb-4 -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+                <div className="flex w-max min-w-full justify-start gap-3 pb-2 sm:justify-center">
+                  {displayedBookings.map((booking) => {
+                    const notification = getNotificationMessage(booking);
+                    return (
+                      <div
+                        key={booking.id}
+                        className="flex w-72 shrink-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md sm:w-80"
+                      >
+                        {/* Top row: Pickup/Drop + Status Badge */}
+                        <div className="flex items-start gap-2 px-3 py-2.5 sm:gap-3 sm:px-4 sm:py-3">
+                          <div className="flex-1 min-w-0">
+                            {/* Pickup */}
+                            <div className="flex items-center gap-1.5 min-w-0 sm:gap-2">
+                              <span className="text-lg shrink-0">
+                                {notification.pickupIcon}
+                              </span>
+                              <span className="text-xs font-semibold text-slate-900 truncate sm:text-sm">
+                                {notification.pickupLocation}
+                              </span>
+                            </div>
+
+                            {/* Drop */}
+                            <div className="mt-1 flex items-center gap-1.5 min-w-0 sm:mt-1.5 sm:gap-2">
+                              <span className="text-lg shrink-0">
+                                {notification.dropIcon}
+                              </span>
+                              <span className="text-xs text-slate-600 truncate sm:text-sm">
+                                {notification.dropLocation}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Status Badge */}
+                          <div className="shrink-0">
+                            <div className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold whitespace-nowrap ${notification.statusBadge}`}>
+                              {notification.statusLabel}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Bottom: Action Button */}
+                        <Link
+                          href="/my-rides"
+                          className={`block px-3 py-1.5 text-center text-xs font-semibold text-white transition sm:px-4 sm:py-2 ${notification.actionColor}`}
+                        >
+                          {notification.actionText} →
+                        </Link>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null;
+          })()}
+
           <div className="dashboard-booking-card rounded-3xl border border-[#D6ECFF] bg-white p-4 shadow-[0_8px_24px_rgba(10,66,130,0.08)] sm:p-6 lg:p-5">
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#3A8EC6]">
               Connecticut booking
@@ -1151,31 +1436,44 @@ export default function UserPage() {
                   )
                 ) : (
                   <>
-                    <input
-                      key={`address-${tripMode}-top`}
-                      ref={tripMode === "pickup" ? dropAddressInputRef : pickupAddressInputRef}
-                      type="text"
-                      value={tripMode === "pickup" ? pickupAddress : dropAddress}
-                      onFocus={() => handleAddressFocus(tripMode)}
-                      onChange={(event) => {
-                        clearFieldError("topField");
-                        if (tripMode === "pickup") {
-                          setPickupAddress(event.target.value);
+                    <div className="relative mt-2">
+                      <input
+                        key={`address-${tripMode}-top`}
+                        ref={tripMode === "pickup" ? dropAddressInputRef : pickupAddressInputRef}
+                        type="text"
+                        value={pickupAddress}
+                        onFocus={() => {
+                          setIsPickupSuggestionsOpen(true);
+                        }}
+                        onBlur={() => {
+                          window.setTimeout(() => {
+                            setIsPickupSuggestionsOpen(false);
+                          }, 120);
+                        }}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          clearFieldError("topField");
+                          setPickupAddress(value);
                           setPickupAddressPlaceId("");
                           setPickupAddressStateCode("");
-                        } else {
-                          setDropAddress(event.target.value);
-                          setDropAddressPlaceId("");
-                          setDropAddressStateCode("");
-                        }
-                      }}
-                      placeholder={topField.placeholder}
-                      className={`mt-2 h-12 w-full rounded-2xl border bg-white px-4 text-sm text-[#17324F] outline-none transition placeholder:text-[#7B8DA3] focus:ring-4 focus:ring-[#38B6FF]/10 lg:h-11 ${
-                        bookingErrors.topField
-                          ? "border-[#F56B6B] focus:border-[#F56B6B] ring-4 ring-[#F56B6B]/10"
-                          : "border-[#D6E7F5] focus:border-[#38B6FF]"
-                      }`}
-                    />
+                          setIsPickupSuggestionsOpen(true);
+                        }}
+                        placeholder={topField.placeholder}
+                        className={`h-12 w-full rounded-2xl border bg-white px-4 text-sm text-[#17324F] outline-none transition placeholder:text-[#7B8DA3] focus:ring-4 focus:ring-[#38B6FF]/10 lg:h-11 ${
+                          bookingErrors.topField
+                            ? "border-[#F56B6B] focus:border-[#F56B6B] ring-4 ring-[#F56B6B]/10"
+                            : "border-[#D6E7F5] focus:border-[#38B6FF]"
+                        }`}
+                      />
+
+                      {renderAddressSuggestions(
+                        pickupSuggestions,
+                        isPickupSuggestionsOpen,
+                        pickupSuggestionsLoading,
+                        (suggestion) =>
+                          handleAddressSuggestionSelect("pickup", suggestion, "topField")
+                      )}
+                    </div>
                     {bookingErrors.topField ? (
                       <p className="mt-1 text-xs font-medium text-[#E25555]">
                         {bookingErrors.topField}
@@ -1205,33 +1503,46 @@ export default function UserPage() {
                   )
                 ) : (
                   <>
-                    <input
-                      key={`address-${tripMode}-second`}
-                      ref={tripMode === "pickup" ? dropAddressInputRef : pickupAddressInputRef}
-                      type="text"
-                      value={tripMode === "pickup" ? dropAddress : pickupAddress}
-                      onFocus={() => handleAddressFocus(tripMode)}
-                      onChange={(event) => {
-                        clearFieldError("secondField");
-                        if (tripMode === "pickup") {
-                          setDropAddress(event.target.value);
+                    <div className="relative mt-2">
+                      <input
+                        key={`address-${tripMode}-second`}
+                        ref={tripMode === "pickup" ? dropAddressInputRef : pickupAddressInputRef}
+                        type="text"
+                        value={dropAddress}
+                        onFocus={() => {
+                          setIsDropSuggestionsOpen(true);
+                        }}
+                        onBlur={() => {
+                          window.setTimeout(() => {
+                            setIsDropSuggestionsOpen(false);
+                          }, 120);
+                        }}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          clearFieldError("secondField");
+                          setDropAddress(value);
                           setDropAddressPlaceId("");
                           setDropAddressStateCode("");
-                        } else {
-                          setPickupAddress(event.target.value);
-                          setPickupAddressPlaceId("");
-                          setPickupAddressStateCode("");
-                        }
-                      }}
-                      placeholder={secondField.placeholder}
-                      className={`mt-2 h-12 w-full rounded-2xl border bg-white px-4 text-sm text-[#17324F] outline-none transition placeholder:text-[#7B8DA3] focus:ring-4 focus:ring-[#38B6FF]/10 lg:h-11 ${
-                        bookingErrors.secondField
-                          ? "border-[#F56B6B] focus:border-[#F56B6B] ring-4 ring-[#F56B6B]/10"
-                          : "border-[#D6E7F5] focus:border-[#38B6FF]"
-                      }`}
-                    />
+                          setIsDropSuggestionsOpen(true);
+                        }}
+                        placeholder={secondField.placeholder}
+                        className={`h-12 w-full rounded-2xl border bg-white px-4 text-sm text-[#17324F] outline-none transition placeholder:text-[#7B8DA3] focus:ring-4 focus:ring-[#38B6FF]/10 lg:h-11 ${
+                          bookingErrors.secondField
+                            ? "border-[#F56B6B] focus:border-[#F56B6B] ring-4 ring-[#F56B6B]/10"
+                            : "border-[#D6E7F5] focus:border-[#38B6FF]"
+                        }`}
+                      />
+
+                      {renderAddressSuggestions(
+                        dropSuggestions,
+                        isDropSuggestionsOpen,
+                        dropSuggestionsLoading,
+                        (suggestion) =>
+                          handleAddressSuggestionSelect("drop", suggestion, "secondField")
+                      )}
+                    </div>
                     <p className="mt-2 text-xs font-normal text-[#5D7490] lg:mt-1.5">
-                      Select a Connecticut or Massachusetts suggestion from Google autocomplete for accurate pricing.
+                      Select your complete Connecticut or Massachusetts address for accurate pricing.
                     </p>
                     {bookingErrors.secondField ? (
                       <p className="mt-1 text-xs font-medium text-[#E25555]">
@@ -1265,7 +1576,7 @@ export default function UserPage() {
                     }`}
                   />
                   <p className="mt-2 text-xs font-normal text-[#5D7490] lg:mt-1.5">
-                    Today is disabled. Select from tomorrow onward.
+                    Schedule your ride for tomorrow or later. Same-day bookings are not available.
                   </p>
                   {bookingErrors.selectedDate ? (
                     <p className="mt-1 text-xs font-medium text-[#E25555]">
