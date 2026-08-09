@@ -54,8 +54,18 @@ export async function POST(request: NextRequest) {
     });
 
     if (!response.ok) {
+      const errorBody = await response.text();
+      console.error("Google Routes API request failed", {
+        status: response.status,
+        statusText: response.statusText,
+        body: errorBody.slice(0, 2000),
+      });
+
       return NextResponse.json(
-        { message: "Routes API request failed." },
+        {
+          message: "Routes API request failed.",
+          upstreamStatus: response.status,
+        },
         { status: 502 }
       );
     }
@@ -86,7 +96,8 @@ export async function POST(request: NextRequest) {
       distanceText,
       durationText: formatDuration(durationSeconds),
     });
-  } catch {
+  } catch (error) {
+    console.error("Unable to call Google Routes API", error);
     return NextResponse.json(
       { message: "Unable to compute route right now." },
       { status: 502 }
