@@ -618,6 +618,7 @@ export default function UserPage() {
           { signal: controller.signal }
         );
         if (!response.ok) {
+          setUseGooglePlacesFallback(true);
           setPickupSuggestions([]);
           return;
         }
@@ -661,6 +662,7 @@ export default function UserPage() {
           { signal: controller.signal }
         );
         if (!response.ok) {
+          setUseGooglePlacesFallback(true);
           setDropSuggestions([]);
           return;
         }
