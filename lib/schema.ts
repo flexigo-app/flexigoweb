@@ -1,10 +1,27 @@
 import {
   boolean,
+  integer,
+  pgEnum,
   pgTable,
   text,
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
+
+export const bookingStatusEnum = pgEnum("booking_status", [
+  "pending",
+  "confirmed",
+  "paid",
+  "assigned",
+  "completed",
+  "cancelled",
+]);
+
+export const tripModeEnum = pgEnum("trip_mode", ["pickup", "drop"]);
+
+export const vehicleTypeEnum = pgEnum("vehicle_type", ["sedan", "suv"]);
+
+export const userRoleEnum = pgEnum("user_role", ["user", "admin"]);
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -13,6 +30,7 @@ export const user = pgTable("user", {
   phoneNumber: text("phone_number").unique(),
   emailVerified: boolean("email_verified").notNull().default(false),
   image: text("image"),
+  role: userRoleEnum("role").notNull().default("user"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -62,6 +80,46 @@ export const verification = pgTable("verification", {
   identifier: text("identifier").notNull(),
   value: text("value").notNull(),
   expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const booking = pgTable("booking", {
+  id: text("id").primaryKey(),
+  confirmationId: text("confirmation_id").notNull().unique(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  status: bookingStatusEnum("status").notNull().default("pending"),
+
+  tripMode: tripModeEnum("trip_mode").notNull(),
+  pickupLocation: text("pickup_location").notNull(),
+  dropLocation: text("drop_location").notNull(),
+  pickupAirport: text("pickup_airport"),
+  dropAirport: text("drop_airport"),
+  pickupAddress: text("pickup_address"),
+  dropAddress: text("drop_address"),
+  pickupAddressPlaceId: text("pickup_address_place_id"),
+  dropAddressPlaceId: text("drop_address_place_id"),
+
+  date: text("date").notNull(),
+  time: text("time").notNull(),
+  meridiem: text("meridiem").notNull(),
+
+  passengerCount: integer("passenger_count").notNull(),
+  vehicleType: vehicleTypeEnum("vehicle_type").notNull(),
+  vehicleLabel: text("vehicle_label").notNull(),
+
+  routeDistanceMeters: integer("route_distance_meters").notNull(),
+  routeDistanceText: text("route_distance_text").notNull(),
+  routeDurationText: text("route_duration_text").notNull(),
+
+  // stored in cents to avoid floating-point rounding issues
+  totalFareCents: integer("total_fare_cents").notNull(),
+
+  driverName: text("driver_name"),
+  driverAssignedAt: timestamp("driver_assigned_at"),
+
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
