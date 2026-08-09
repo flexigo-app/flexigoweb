@@ -8,6 +8,18 @@ const googleClientId = process.env.GOOGLE_CLIENT_ID;
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
 const databaseUrl = process.env.DATABASE_URL;
 
+// Helper to build Google OAuth config with optional prompt parameter
+const buildGoogleConfig = () => {
+  if (!googleClientId || !googleClientSecret) {
+    return undefined;
+  }
+
+  return {
+    clientId: googleClientId,
+    clientSecret: googleClientSecret,
+  };
+};
+
 export const auth = betterAuth({
   baseURL: betterAuthUrl,
   secret:
@@ -19,13 +31,9 @@ export const auth = betterAuth({
         schema,
       })
     : undefined,
-  socialProviders:
-    googleClientId && googleClientSecret
-      ? {
-          google: {
-            clientId: googleClientId,
-            clientSecret: googleClientSecret,
-          },
-        }
-      : undefined,
+  socialProviders: buildGoogleConfig()
+    ? {
+        google: buildGoogleConfig(),
+      }
+    : undefined,
 });

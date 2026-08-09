@@ -24,11 +24,24 @@ export default function LoginPage() {
     }
   }, [router, sessionData]);
 
-  const handleGoogleSignIn = async () => {
+  const handleGoogleSignIn = async (selectAccount: boolean = false) => {
     setErrorMessage(null);
     setIsLoading(true);
 
     try {
+      if (selectAccount) {
+        // Sign out first to clear better-auth session
+        await authClient.signOut();
+
+        // Small delay to ensure session is cleared
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Reload to get fresh login page
+        window.location.href = "/login";
+        return;
+      }
+
+      // Standard seamless login with better-auth
       await authClient.signIn.social({
         provider: "google",
         callbackURL: "/user",
@@ -63,11 +76,20 @@ export default function LoginPage() {
 
           <button
             type="button"
-            onClick={handleGoogleSignIn}
+            onClick={() => handleGoogleSignIn(false)}
             disabled={isLoading || isPending}
             className="mt-8 inline-flex h-14 w-full items-center justify-center rounded-full bg-white px-6 text-[13px] font-semibold uppercase tracking-[0.12em] text-[#0f3b5a] shadow-lg shadow-sky-600/25 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:bg-slate-200"
           >
             {isLoading || isPending ? "Redirecting..." : "Continue with Google"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleGoogleSignIn(true)}
+            disabled={isLoading || isPending}
+            className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-full border border-white/60 bg-transparent px-6 text-xs font-semibold uppercase tracking-[0.12em] text-white/85 transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Use a different account
           </button>
 
           {errorMessage ? (
