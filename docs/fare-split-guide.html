@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FlexiGo Fare Split Guide</title>
+  <style>
+    :root { --ink:#102a43; --muted:#5b6e80; --line:#d7e2ea; --sky:#eaf6ff; --blue:#146fc8; --green:#087d55; --amber:#a45a00; --paper:#fffdf8; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:linear-gradient(135deg,#eaf6ff 0%,#f8fbf8 45%,#fff5dd 100%); font:16px/1.5 Georgia, "Times New Roman", serif; }
+    main { width:min(1120px,calc(100% - 32px)); margin:0 auto; padding:44px 0 72px; }
+    header { padding:34px; color:white; background:#123f63; box-shadow:0 16px 36px rgba(16,42,67,.18); }
+    .brand { font:700 italic 28px/1 Arial,sans-serif; color:#8fd2ff; letter-spacing:0; }
+    h1 { max-width:720px; margin:20px 0 10px; font:700 clamp(34px,5vw,62px)/1.02 Georgia,serif; letter-spacing:0; }
+    h2 { margin:0 0 10px; font-size:27px; line-height:1.1; }
+    h3 { margin:0 0 8px; font:700 16px/1.2 Arial,sans-serif; letter-spacing:0; }
+    p { margin:0 0 13px; }
+    .lead { max-width:720px; color:#dbeeff; font-size:19px; }
+    .eyebrow { color:#4f9ed5; font:700 12px/1 Arial,sans-serif; letter-spacing:0; text-transform:uppercase; }
+    section { margin-top:28px; padding:28px; background:rgba(255,255,255,.9); border:1px solid rgba(155,180,196,.55); box-shadow:0 8px 20px rgba(21,50,76,.07); }
+    .plain { font:20px/1.4 Georgia,serif; }
+    .grid { display:grid; gap:18px; }
+    .two { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .three { grid-template-columns:repeat(3,minmax(0,1fr)); }
+    .model { border-top:5px solid var(--blue); padding:22px; background:#fff; }
+    .model.fleet { border-color:var(--green); }
+    .model h2 { font-size:25px; }
+    .pill { display:inline-block; padding:5px 9px; background:#edf7ff; color:#17649f; font:700 11px/1 Arial,sans-serif; text-transform:uppercase; }
+    .fleet .pill { color:#087d55; background:#e9f7ee; }
+    ul { margin:12px 0 0; padding-left:20px; }
+    li { margin:6px 0; }
+    .formula { margin-top:14px; padding:14px; background:var(--paper); border-left:4px solid #e0a131; font-family:Arial,sans-serif; font-size:14px; }
+    .notice { padding:16px 18px; background:#fff5dc; border-left:4px solid #d79725; color:#61400c; }
+    .calc { background:#f8fcff; }
+    .inputs { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:18px 0; }
+    label { color:#425569; font:700 12px/1.2 Arial,sans-serif; }
+    input { display:block; width:100%; margin-top:6px; padding:10px; border:1px solid #b8c9d4; color:var(--ink); background:#fff; font:16px Arial,sans-serif; }
+    .result { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); overflow:hidden; border:1px solid var(--line); }
+    .result > div { padding:16px; border-right:1px solid var(--line); background:#fff; }
+    .result > div:last-child { border:0; }
+    .label { color:var(--muted); font:700 11px/1 Arial,sans-serif; text-transform:uppercase; }
+    .amount { display:block; margin-top:7px; font:700 27px/1 Arial,sans-serif; }
+    .driver { color:var(--green); } .business { color:var(--blue); } .tax { color:var(--amber); }
+    .tiny { margin-top:7px; color:var(--muted); font:13px/1.35 Arial,sans-serif; }
+    table { width:100%; border-collapse:collapse; margin-top:16px; font-family:Arial,sans-serif; font-size:14px; }
+    th,td { padding:12px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { color:#405365; font-size:11px; text-transform:uppercase; }
+    .sources a { color:#075d9c; }
+    footer { padding:22px 0; color:var(--muted); font:13px Arial,sans-serif; }
+    @media (max-width:760px) { main { width:min(100% - 20px,1120px); padding-top:16px; } header,section { padding:21px; } .two,.three,.inputs,.result { grid-template-columns:1fr; } .result > div { border-right:0; border-bottom:1px solid var(--line); } .result > div:last-child { border-bottom:0; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="brand">FlexiGo</div>
+      <p class="eyebrow">Plain-language operations guide</p>
+      <h1>Where does the fare go?</h1>
+      <p class="lead">FlexiGo can run the same customer trip in two different ways. The important difference is who provides the car and who pays its operating costs.</p>
+    </header>
+
+    <section>
+      <p class="eyebrow">Start here</p>
+      <h2>One customer price. Two fulfillment models.</h2>
+      <p class="plain">The customer sees one total. Behind that total, FlexiGo uses either a <strong>driver-owned car</strong> split or a <strong>FlexiGo fleet</strong> operating calculation. The correct model is selected by an admin before the ride is finalized.</p>
+      <div class="notice"><strong>Important:</strong> a collected tax is not FlexiGo income, and an airport fee is not automatically FlexiGo income. Their treatment depends on the configured rule and the real party that owes the charge.</div>
+    </section>
+
+    <section class="grid two">
+      <article class="model">
+        <span class="pill">Model A</span>
+        <h2>Driver-owned car</h2>
+        <p>The driver brings and operates their own eligible vehicle. The driver normally bears vehicle ownership costs such as fuel, maintenance, insurance, and depreciation.</p>
+        <ul>
+          <li>FlexiGo calculates the customer fare.</li>
+          <li>FlexiGo keeps a configured percentage of the <strong>trip fare</strong>, plus the booking fee.</li>
+          <li>The driver receives the rest of the trip fare.</li>
+          <li>Airport reimbursement is added to the driver when configured that way.</li>
+          <li>Tax is collected for remittance, not treated as driver or FlexiGo earnings.</li>
+        </ul>
+        <div class="formula">Driver payout = trip fare − FlexiGo commission + airport reimbursement</div>
+      </article>
+      <article class="model fleet">
+        <span class="pill">Model B</span>
+        <h2>FlexiGo fleet car</h2>
+        <p>FlexiGo supplies the car and pays for operating it. The driver is paid compensation for completing the trip instead of receiving a percentage of the fare.</p>
+        <ul>
+          <li>FlexiGo pays the driver a configured trip amount plus per-mile pay.</li>
+          <li>FlexiGo pays fuel, maintenance/depreciation reserve, and payment processing.</li>
+          <li>The key business measure is <strong>estimated contribution</strong>, not commission.</li>
+          <li>The ride is healthy only when contribution remains positive after real operating costs.</li>
+        </ul>
+        <div class="formula">Estimated contribution = customer total − tax − driver compensation − fuel − vehicle reserve − processing − airport cost</div>
+      </article>
+    </section>
+
+    <section class="calc">
+      <p class="eyebrow">Interactive example</p>
+      <h2>Try the current FlexiGo math</h2>
+      <p>Change the inputs below. This calculator mirrors the concepts in the admin portal; it is an educational preview, not a legal tax calculation.</p>
+      <div class="inputs">
+        <label>Trip fare ($)<input id="trip" type="number" step="0.01" value="363.24"></label>
+        <label>Booking fee ($)<input id="booking" type="number" step="0.01" value="2.50"></label>
+        <label>Airport fee ($)<input id="airport" type="number" step="0.01" value="7.00"></label>
+        <label>Tax rate (%)<input id="taxRate" type="number" step="0.01" value="5"></label>
+        <label>Driver-owned commission (%)<input id="commission" type="number" step="0.01" value="20"></label>
+        <label>Distance (miles)<input id="miles" type="number" step="0.1" value="193"></label>
+        <label>Fleet driver trip pay ($)<input id="fleetBase" type="number" step="0.01" value="25"></label>
+        <label>Fleet driver pay per mile ($)<input id="fleetDriverMile" type="number" step="0.01" value="0.65"></label>
+        <label>Fuel per mile ($)<input id="fuel" type="number" step="0.01" value="0.18"></label>
+        <label>Vehicle reserve per mile ($)<input id="reserve" type="number" step="0.01" value="0.25"></label>
+        <label>Payment processing (%)<input id="processing" type="number" step="0.01" value="3"></label>
+      </div>
+      <div class="grid two">
+        <div>
+          <h3>Driver-owned outcome</h3>
+          <div class="result">
+            <div><span class="label">Customer pays</span><strong class="amount" id="ownedCustomer"></strong></div>
+            <div><span class="label">Driver receives</span><strong class="amount driver" id="ownedDriver"></strong></div>
+            <div><span class="label">FlexiGo keeps</span><strong class="amount business" id="ownedFlexigo"></strong><p class="tiny" id="ownedText"></p></div>
+          </div>
+        </div>
+        <div>
+          <h3>FlexiGo fleet outcome</h3>
+          <div class="result">
+            <div><span class="label">Customer pays</span><strong class="amount" id="fleetCustomer"></strong></div>
+            <div><span class="label">Driver compensation</span><strong class="amount driver" id="fleetDriver"></strong></div>
+            <div><span class="label">Estimated contribution</span><strong class="amount business" id="fleetContribution"></strong><p class="tiny" id="fleetText"></p></div>
+          </div>
+        </div>
+      </div>
+      <p class="tiny" id="taxExplain"></p>
+    </section>
+
+    <section>
+      <p class="eyebrow">Fees and tax</p>
+      <h2>What each line item means</h2>
+      <table>
+        <thead><tr><th>Item</th><th>What it is</th><th>Who it belongs to in the current model</th></tr></thead>
+        <tbody>
+          <tr><td>Trip fare</td><td>The base fare plus distance pricing, subject to the selected vehicle’s minimum fare.</td><td>Split between driver and FlexiGo for driver-owned rides. It supports all fleet operating costs for FlexiGo-fleet rides.</td></tr>
+          <tr><td>Booking fee</td><td>A separate customer service/marketplace charge.</td><td>FlexiGo revenue in the current configuration.</td></tr>
+          <tr><td>Airport access fee</td><td>A configured charge for a trip that starts or ends at an airport.</td><td>Driver reimbursement for the current driver-owned formula. A FlexiGo fleet calculation treats it as an operating/airport cost.</td></tr>
+          <tr><td>Tax</td><td>A calculated amount on the configured taxable subtotal.</td><td>Held for remittance. It is not driver earnings or FlexiGo revenue.</td></tr>
+        </tbody>
+      </table>
+      <div class="notice" style="margin-top:16px"><strong>Before charging real tax:</strong> verify the jurisdiction, taxable components, airport rules, filing responsibility, and remittance process with a qualified CPA or transportation-tax adviser. A single global percentage is suitable for QA, not a final compliance strategy.</div>
+    </section>
+
+    <section>
+      <p class="eyebrow">Industry context</p>
+      <h2>What other mobility businesses show</h2>
+      <div class="grid three">
+        <div><h3>Large ride-hail platforms</h3><p>Companies such as Uber and Lyft generally calculate rider prices and driver earnings separately. Their effective platform take can vary by market, incentives, insurance, fees, and ride conditions. A single published commission percentage is usually not the whole story.</p></div>
+        <div><h3>Commission marketplaces</h3><p>Many aggregator models retain a platform fee or commission while independent drivers provide the car and absorb vehicle costs. FlexiGo’s driver-owned model follows this family, but keeps the split explicit in the admin portal.</p></div>
+        <div><h3>Direct-to-driver model</h3><p>Namma Yatri publicly describes a zero-commission, direct-payment model. It is a useful transparency benchmark, but it requires another way to fund technology, support, compliance, and operations.</p></div>
+      </div>
+      <p class="tiny sources">Reference points: <a href="https://www.nammayatri.in/" target="_blank" rel="noreferrer">Namma Yatri</a> describes direct payment and zero commission. For FlexiGo, company-fleet costs must still be covered from each fleet ride’s contribution margin.</p>
+    </section>
+
+    <section>
+      <p class="eyebrow">Simple operating rule</p>
+      <h2>Use the right question for each ride</h2>
+      <div class="grid two">
+        <div><h3>Driver-owned ride</h3><p><strong>Is the driver payout attractive enough</strong> after the platform’s agreed commission and reimbursements?</p></div>
+        <div><h3>FlexiGo fleet ride</h3><p><strong>Is the contribution positive enough</strong> after driver compensation, fuel, reserve, processing, airport charges, and tax?</p></div>
+      </div>
+    </section>
+    <footer>FlexiGo QA business explainer. Keep this guide aligned with policy changes in the Admin Fleet &amp; Pricing screen.</footer>
+  </main>
+  <script>
+    const ids = ['trip','booking','airport','taxRate','commission','miles','fleetBase','fleetDriverMile','fuel','reserve','processing'];
+    const money = value => new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(value);
+    const num = id => Number(document.getElementById(id).value) || 0;
+    function calculate() {
+      const trip=num('trip'), booking=num('booking'), airport=num('airport'), taxRate=num('taxRate')/100, commission=num('commission')/100, miles=num('miles');
+      const taxBase=trip+booking+airport, tax=Math.round(taxBase*taxRate*100)/100, customer=taxBase+tax;
+      const platformCommission=Math.round(trip*commission*100)/100, ownedDriver=trip-platformCommission+airport, flexigo=platformCommission+booking;
+      const fleetDriver=num('fleetBase')+miles*num('fleetDriverMile'), fuel=miles*num('fuel'), reserve=miles*num('reserve'), processing=Math.round((customer-tax)*num('processing'))/100;
+      const contribution=customer-tax-fleetDriver-fuel-reserve-processing-airport;
+      document.getElementById('ownedCustomer').textContent=money(customer);
+      document.getElementById('ownedDriver').textContent=money(ownedDriver);
+      document.getElementById('ownedFlexigo').textContent=money(flexigo);
+      document.getElementById('ownedText').textContent=`${money(platformCommission)} commission + ${money(booking)} booking fee`;
+      document.getElementById('fleetCustomer').textContent=money(customer);
+      document.getElementById('fleetDriver').textContent=money(fleetDriver);
+      document.getElementById('fleetContribution').textContent=money(contribution);
+      document.getElementById('fleetContribution').className=`amount ${contribution >= 0 ? 'business' : 'tax'}`;
+      document.getElementById('fleetText').textContent=`After ${money(fuel)} fuel, ${money(reserve)} reserve, ${money(processing)} processing, and ${money(airport)} airport cost`;
+      document.getElementById('taxExplain').textContent=`Tax example: ${money(trip)} trip fare + ${money(booking)} booking fee + ${money(airport)} airport fee = ${money(taxBase)} taxable subtotal. At ${(taxRate*100).toFixed(2)}%, tax is ${money(tax)}.`;
+    }
+    ids.forEach(id => document.getElementById(id).addEventListener('input',calculate)); calculate();
+  </script>
+</body>
+</html>

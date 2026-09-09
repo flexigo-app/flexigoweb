@@ -1,35 +1,22 @@
 {
-  "name": "flexigotravel",
-  "version": "0.1.0",
+  "name": "flexigotravel-monorepo",
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
-  },
-  "dependencies": {
-    "@better-auth/drizzle-adapter": "^1.6.23",
-    "@neondatabase/serverless": "^1.1.0",
-    "better-auth": "^1.6.23",
-    "drizzle-orm": "^0.45.2",
-    "next": "16.2.10",
-    "react": "19.2.4",
-    "react-dom": "19.2.4"
-  },
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "dotenv": "^17.4.2",
-    "drizzle-kit": "^0.31.10",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.10",
-    "tailwindcss": "^4",
-    "typescript": "^5"
+    "dev": "npm run dev:web",
+    "dev:web": "npm --workspace apps/web run dev",
+    "dev:admin": "npm --workspace apps/admin run dev",
+    "dev:driver": "npm --workspace apps/driver run dev",
+    "build": "npm run build:web",
+    "build:web": "npm --workspace apps/web run build",
+    "build:admin": "npm --workspace apps/admin run build",
+    "build:driver": "npm --workspace apps/driver run build",
+    "lint": "npm run lint:web",
+    "lint:web": "npm --workspace apps/web run lint",
+    "lint:admin": "npm --workspace apps/admin run lint",
+    "lint:driver": "npm --workspace apps/driver run lint"
   }
 }
