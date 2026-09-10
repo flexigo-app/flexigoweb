@@ -111,7 +111,7 @@ export function SiteFooter() {
 
         <div className="mt-10 flex flex-col gap-3 border-t border-white/10 pt-6 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-slate-500">
-            &copy; {new Date().getFullYear()} FlexiGo Travel. All rights reserved.
+            &copy; {new Date().getFullYear()} FlexiGo LLC. All rights reserved.
           </p>
           <div className="flex items-center gap-4">
             <Link href="/terms" className="text-xs text-slate-500 hover:text-slate-300">
