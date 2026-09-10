@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { Montserrat } from "next/font/google";
 import { SiteFooter } from "../components/site-footer";
+import { HomeLink } from "../components/home-link";
 import { ParallaxLayer, Reveal } from "./_components/scroll-effects";
 import {
   AirplaneIcon,
@@ -54,18 +54,16 @@ export default function AboutPage() {
     <main className="flex min-h-screen flex-col overflow-x-hidden bg-white text-slate-800">
       <header className="border-b border-slate-100 bg-white">
         <div className="mx-auto flex w-full max-w-4xl items-center justify-between px-4 py-4 sm:px-6">
-          <Link
-            href="/"
+          <HomeLink
             className={`${montserrat.className} text-2xl font-bold italic tracking-tight text-[#0B83E9]`}
           >
             FlexiGo
-          </Link>
-          <Link
-            href="/"
+          </HomeLink>
+          <HomeLink
             className="text-sm font-medium text-slate-500 hover:text-slate-800"
           >
             Back to home
-          </Link>
+          </HomeLink>
         </div>
       </header>
 
@@ -93,7 +91,7 @@ export default function AboutPage() {
           <p className="mt-6 text-base leading-7 text-slate-600 sm:text-lg">
             FlexiGo is a licensed Transportation Network Company (TNC)
             connecting travelers across Connecticut with a trusted network
-            of independent, professional drivers &mdash;
+            of independent, licensed drivers &mdash;
             every ride scheduled ahead, every trip tracked door to door.
           </p>
           <div className="mt-8 flex items-center justify-center gap-3 text-[#0B83E9]">
@@ -118,7 +116,7 @@ export default function AboutPage() {
             Getting to the airport shouldn&apos;t be a gamble. No circling
             for a ride, no surge pricing, no uncertainty about who&apos;s
             showing up. FlexiGo was built around a simple idea: book your
-            transfer ahead of time, and let a vetted professional handle the
+            transfer ahead of time, and let a vetted local driver handle the
             rest &mdash; punctual, comfortable, and worry-free from pickup to
             drop-off.
           </p>

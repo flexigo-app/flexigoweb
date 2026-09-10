@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { Montserrat } from "next/font/google";
 import { SiteFooter } from "../components/site-footer";
+import { HomeLink } from "../components/home-link";
 
 const montserrat = Montserrat({
   subsets: ["latin"],
@@ -17,18 +17,16 @@ export default function TermsPage() {
     <main className="flex min-h-screen flex-col bg-white text-slate-800">
       <header className="border-b border-slate-100 bg-white">
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between px-4 py-4 sm:px-6">
-          <Link
-            href="/"
+          <HomeLink
             className={`${montserrat.className} text-2xl font-bold italic tracking-tight text-[#0B83E9]`}
           >
             FlexiGo
-          </Link>
-          <Link
-            href="/"
+          </HomeLink>
+          <HomeLink
             className="text-sm font-medium text-slate-500 hover:text-slate-800"
           >
             Back to home
-          </Link>
+          </HomeLink>
         </div>
       </header>
 
@@ -55,7 +53,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-lg font-bold text-slate-900">2. Booking &amp; rides</h2>
             <p className="mt-2">
-              FlexiGo connects riders with independent, professional drivers for
+              FlexiGo connects riders with independent, licensed drivers for
               pre-scheduled private transfers. All bookings are subject to
               availability, and fares are calculated based on distance, vehicle
               type, and applicable fees at the time of booking.

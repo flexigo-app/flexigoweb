@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { Montserrat } from "next/font/google";
 import { SiteFooter } from "../components/site-footer";
+import { HomeLink } from "../components/home-link";
 
 const montserrat = Montserrat({
   subsets: ["latin"],
@@ -17,18 +17,16 @@ export default function PrivacyPage() {
     <main className="flex min-h-screen flex-col bg-white text-slate-800">
       <header className="border-b border-slate-100 bg-white">
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between px-4 py-4 sm:px-6">
-          <Link
-            href="/"
+          <HomeLink
             className={`${montserrat.className} text-2xl font-bold italic tracking-tight text-[#0B83E9]`}
           >
             FlexiGo
-          </Link>
-          <Link
-            href="/"
+          </HomeLink>
+          <HomeLink
             className="text-sm font-medium text-slate-500 hover:text-slate-800"
           >
             Back to home
-          </Link>
+          </HomeLink>
         </div>
       </header>
 

@@ -1,11 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { Montserrat } from "next/font/google";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { SiteFooter } from "../components/site-footer";
+import { HomeLink } from "../components/home-link";
 
 const montserrat = Montserrat({
   subsets: ["latin"],
@@ -114,12 +114,11 @@ export default function LoginPage() {
             </p>
           ) : null}
 
-          <Link
-            href="/"
+          <HomeLink
             className="mt-4 inline-flex h-12 w-full items-center justify-center rounded-full border border-white/60 bg-transparent px-5 text-sm font-semibold uppercase tracking-[0.12em] text-white transition hover:bg-white/15"
           >
             Back to home
-          </Link>
+          </HomeLink>
         </div>
       </section>
 

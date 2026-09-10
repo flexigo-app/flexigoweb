@@ -1,33 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const allowedStateCodes = new Set(["CT"]);
 const autocompleteEndpoint = "https://maps.googleapis.com/maps/api/place/autocomplete/json";
-const detailsEndpoint = "https://maps.googleapis.com/maps/api/place/details/json";
+
+// Bias predictions toward Connecticut without an extra network round trip
+// (avoids calling Place Details for every candidate just to filter by state).
+// Center + radius sized generously so strictbounds doesn't clip towns near
+// the state border; the terms-based state filter below still enforces CT-only.
+const connecticutCenter = "41.5,-72.75";
+const connecticutRadiusMeters = "140000";
 
 type GoogleAutocompletePrediction = {
   place_id?: string;
+  description?: string;
+  terms?: { value?: string }[];
 };
 
 type GoogleAutocompleteResponse = {
   status?: string;
   error_message?: string;
   predictions?: GoogleAutocompletePrediction[];
-};
-
-type GooglePlaceDetailsAddressComponent = {
-  short_name?: string;
-  types?: string[];
-};
-
-type GooglePlaceDetailsResult = {
-  formatted_address?: string;
-  place_id?: string;
-  address_components?: GooglePlaceDetailsAddressComponent[];
-};
-
-type GooglePlaceDetailsResponse = {
-  status?: string;
-  result?: GooglePlaceDetailsResult;
 };
 
 type FilteredSuggestion = {
@@ -39,36 +30,30 @@ type FilteredSuggestion = {
 const getMapsApiKey = () =>
   process.env.GOOGLE_MAPS_API_KEY ?? process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
-const getStateCode = (
-  addressComponents: GooglePlaceDetailsAddressComponent[] | undefined
-) =>
-  addressComponents
-    ?.find((component) => component.types?.includes("administrative_area_level_1"))
-    ?.short_name ?? "";
+// The legacy Autocomplete API doesn't return address_components, but for US
+// street addresses the terms array is reliably [street, city, state, country].
+const getStateCodeFromTerms = (terms: GoogleAutocompletePrediction["terms"]) => {
+  if (!terms || terms.length < 2) return "";
+  return terms[terms.length - 2]?.value ?? "";
+};
 
-const buildAutocompleteUrl = (input: string, apiKey: string) => {
+const buildAutocompleteUrl = (input: string, apiKey: string, sessionToken?: string) => {
   const params = new URLSearchParams({
     input,
     key: apiKey,
     components: "country:us",
     types: "address",
+    location: connecticutCenter,
+    radius: connecticutRadiusMeters,
+    strictbounds: "true",
   });
+  if (sessionToken) params.set("sessiontoken", sessionToken);
 
   return `${autocompleteEndpoint}?${params.toString()}`;
 };
 
-const buildDetailsUrl = (placeId: string, apiKey: string) => {
-  const params = new URLSearchParams({
-    place_id: placeId,
-    fields: "place_id,formatted_address,address_component",
-    key: apiKey,
-  });
-
-  return `${detailsEndpoint}?${params.toString()}`;
-};
-
-const getFilteredSuggestions = async (input: string, apiKey: string) => {
-  const autocompleteResponse = await fetch(buildAutocompleteUrl(input, apiKey), {
+const getFilteredSuggestions = async (input: string, apiKey: string, sessionToken?: string) => {
+  const autocompleteResponse = await fetch(buildAutocompleteUrl(input, apiKey, sessionToken), {
     cache: "no-store",
   });
 
@@ -87,55 +72,26 @@ const getFilteredSuggestions = async (input: string, apiKey: string) => {
     };
   }
 
-  const predictions = (autocompleteData.predictions ?? []).slice(0, 8);
+  const seen = new Set<string>();
+  const suggestions = (autocompleteData.predictions ?? [])
+    .map((prediction): FilteredSuggestion | null => {
+      if (!prediction.place_id || !prediction.description) return null;
 
-  if (predictions.length === 0) {
-    return { status: "OK", suggestions: [] as FilteredSuggestion[] };
-  }
-
-  const detailResults = await Promise.all(
-    predictions.map(async (prediction) => {
-      if (!prediction.place_id) return null;
-
-      const detailsResponse = await fetch(
-        buildDetailsUrl(prediction.place_id, apiKey),
-        { cache: "no-store" }
-      );
-
-      if (!detailsResponse.ok) return null;
-
-      const detailsData = (await detailsResponse.json()) as GooglePlaceDetailsResponse;
-      if (detailsData.status !== "OK" || !detailsData.result) return null;
-
-      const stateCode = getStateCode(detailsData.result.address_components);
-      if (!allowedStateCodes.has(stateCode)) return null;
-
-      const placeId = detailsData.result.place_id ?? "";
-      const formattedAddress = detailsData.result.formatted_address ?? "";
-
-      if (!placeId || !formattedAddress) return null;
+      const stateCode = getStateCodeFromTerms(prediction.terms);
+      if (stateCode !== "CT") return null;
+      if (seen.has(prediction.place_id)) return null;
+      seen.add(prediction.place_id);
 
       return {
-        placeId,
-        formattedAddress,
+        placeId: prediction.place_id,
+        formattedAddress: prediction.description,
         stateCode,
-      } satisfies FilteredSuggestion;
+      };
     })
-  );
+    .filter((suggestion): suggestion is FilteredSuggestion => suggestion !== null)
+    .slice(0, 5);
 
-  const seen = new Set<string>();
-  const suggestions = detailResults.filter((suggestion): suggestion is FilteredSuggestion => {
-    if (!suggestion) return false;
-    if (seen.has(suggestion.placeId)) return false;
-    seen.add(suggestion.placeId);
-    return true;
-  });
-
-  return {
-    status: "OK",
-    errorMessage: "",
-    suggestions: suggestions.slice(0, 5),
-  };
+  return { status: "OK", errorMessage: "", suggestions };
 };
 
 export async function GET(request: NextRequest) {
@@ -151,9 +107,10 @@ export async function GET(request: NextRequest) {
   if (input.length < 3) {
     return NextResponse.json({ suggestions: [] });
   }
+  const sessionToken = request.nextUrl.searchParams.get("sessiontoken")?.trim();
 
   try {
-    const result = await getFilteredSuggestions(input, apiKey);
+    const result = await getFilteredSuggestions(input, apiKey, sessionToken);
     return NextResponse.json({
       suggestions: result.suggestions,
       status: result.status,

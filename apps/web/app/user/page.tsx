@@ -154,7 +154,7 @@ const toVehicleOption = (vehicle: Omit<VehicleOption, "label" | "passengerRange"
   label: vehicle.name,
   passengerRange: `1 - ${vehicle.passengerCapacity}`,
   bagLimit: `Up to ${vehicle.luggageCapacity} bags`,
-  highlights: ["Private ride", "Professional driver", "Door-to-door"],
+  highlights: ["Private ride", "Vetted driver", "Door-to-door"],
   imageSrc: vehicleImageById[vehicle.id] ?? "/SUV-v2.png",
 });
 const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
@@ -286,6 +286,10 @@ export default function UserPage() {
   const dropAutocompleteRef = useRef<GooglePlacesAutocompleteInstance | null>(null);
   const pickupBoundInputRef = useRef<HTMLInputElement | null>(null);
   const dropBoundInputRef = useRef<HTMLInputElement | null>(null);
+  // Google Places bills Autocomplete+Details as one cheaper "session" when the
+  // same token is reused for every keystroke and the concluding Details call.
+  const pickupSessionTokenRef = useRef<string | null>(null);
+  const dropSessionTokenRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!isPending && !sessionData?.session) {
@@ -341,9 +345,9 @@ export default function UserPage() {
     return () => clearInterval(interval);
   }, [sessionData?.session]);
 
-  // Auto-dismiss completed/cancelled bookings after 5 seconds
+  // Auto-dismiss completed bookings after 5 seconds
   useEffect(() => {
-    const finalStatuses = ["completed", "cancelled"];
+    const finalStatuses = ["completed"];
     const timers: NodeJS.Timeout[] = [];
 
     recentBookings.forEach((booking) => {
@@ -761,6 +765,11 @@ export default function UserPage() {
     suggestion: AddressSuggestion,
     errorKey: keyof BookingErrorState
   ) => {
+    const sessionTokenRef = side === "pickup" ? pickupSessionTokenRef : dropSessionTokenRef;
+    const sessionToken = sessionTokenRef.current;
+    // The session concludes here regardless of outcome; next search gets a fresh token.
+    sessionTokenRef.current = null;
+
     if (side === "pickup") {
       setPickupAddress(suggestion.formattedAddress);
       setPickupAddressPlaceId(suggestion.placeId);
@@ -776,10 +785,41 @@ export default function UserPage() {
     }
 
     clearFieldError(errorKey);
+
+    // Single confirming call (closes the billing session) — never per keystroke.
+    void (async () => {
+      try {
+        const params = new URLSearchParams({ placeId: suggestion.placeId });
+        if (sessionToken) params.set("sessiontoken", sessionToken);
+        const response = await fetch(`/api/places/details?${params.toString()}`);
+        if (!response.ok) return;
+        const data = (await response.json()) as Partial<AddressSuggestion> & {
+          stateCode?: string;
+        };
+        if (!data.formattedAddress || !data.stateCode) return;
+
+        if (side === "pickup") {
+          setPickupAddress(data.formattedAddress);
+          setPickupAddressStateCode(data.stateCode);
+          setPickupAddressPlaceId(
+            allowedAddressStateCodes.has(data.stateCode) ? suggestion.placeId : ""
+          );
+        } else {
+          setDropAddress(data.formattedAddress);
+          setDropAddressStateCode(data.stateCode);
+          setDropAddressPlaceId(
+            allowedAddressStateCodes.has(data.stateCode) ? suggestion.placeId : ""
+          );
+        }
+      } catch {
+        // Keep the optimistic values from the prediction on failure.
+      }
+    })();
   };
 
   useEffect(() => {
     if (pickupAddressPlaceId || pickupAddress.trim().length < 3) {
+      pickupSessionTokenRef.current = null;
       queueMicrotask(() => {
         setPickupSuggestions([]);
         setPickupSuggestionsLoading(false);
@@ -791,10 +831,16 @@ export default function UserPage() {
     const timeoutId = window.setTimeout(async () => {
       setPickupSuggestionsLoading(true);
       try {
-        const response = await fetch(
-          `/api/places/autocomplete?input=${encodeURIComponent(pickupAddress.trim())}`,
-          { signal: controller.signal }
-        );
+        if (!pickupSessionTokenRef.current) {
+          pickupSessionTokenRef.current = crypto.randomUUID();
+        }
+        const params = new URLSearchParams({
+          input: pickupAddress.trim(),
+          sessiontoken: pickupSessionTokenRef.current,
+        });
+        const response = await fetch(`/api/places/autocomplete?${params.toString()}`, {
+          signal: controller.signal,
+        });
         if (!response.ok) {
           setUseGooglePlacesFallback(true);
           setPickupSuggestions([]);
@@ -816,7 +862,7 @@ export default function UserPage() {
       } finally {
         setPickupSuggestionsLoading(false);
       }
-    }, 250);
+    }, 150);
 
     return () => {
       controller.abort();
@@ -826,6 +872,7 @@ export default function UserPage() {
 
   useEffect(() => {
     if (dropAddressPlaceId || dropAddress.trim().length < 3) {
+      dropSessionTokenRef.current = null;
       queueMicrotask(() => {
         setDropSuggestions([]);
         setDropSuggestionsLoading(false);
@@ -837,10 +884,16 @@ export default function UserPage() {
     const timeoutId = window.setTimeout(async () => {
       setDropSuggestionsLoading(true);
       try {
-        const response = await fetch(
-          `/api/places/autocomplete?input=${encodeURIComponent(dropAddress.trim())}`,
-          { signal: controller.signal }
-        );
+        if (!dropSessionTokenRef.current) {
+          dropSessionTokenRef.current = crypto.randomUUID();
+        }
+        const params = new URLSearchParams({
+          input: dropAddress.trim(),
+          sessiontoken: dropSessionTokenRef.current,
+        });
+        const response = await fetch(`/api/places/autocomplete?${params.toString()}`, {
+          signal: controller.signal,
+        });
         if (!response.ok) {
           setUseGooglePlacesFallback(true);
           setDropSuggestions([]);
@@ -862,7 +915,7 @@ export default function UserPage() {
       } finally {
         setDropSuggestionsLoading(false);
       }
-    }, 250);
+    }, 150);
 
     return () => {
       controller.abort();
@@ -1531,10 +1584,7 @@ export default function UserPage() {
             const displayedBookings = recentBookings.filter((booking) => {
               const status = booking.status.toLowerCase();
               if (activeStatuses.includes(status)) return true;
-              if (
-                ["completed", "cancelled"].includes(status) &&
-                !dismissedFinalBookings.has(booking.id)
-              ) {
+              if (status === "completed" && !dismissedFinalBookings.has(booking.id)) {
                 return true;
               }
               return false;
@@ -1598,17 +1648,9 @@ export default function UserPage() {
           })()}
         </div>
 
-        <div className="dashboard-mobile-mapcard flex min-h-0 flex-1 flex-col lg:contents">
-        <aside className="dashboard-map-panel relative -mx-4 h-72 w-[calc(100%+2rem)] shrink-0 overflow-hidden rounded-2xl border border-[#BEE4FF] bg-[#EAF6FF] shadow-[0_8px_24px_rgba(10,66,130,0.08)] sm:-mx-6 sm:h-96 sm:w-[calc(100%+3rem)] lg:col-start-2 lg:row-start-1 lg:mx-0 lg:h-auto lg:w-auto lg:shrink lg:min-h-[calc(100vh-8.5rem)] lg:rounded-[20px] lg:rounded-l-none">
-          <div ref={setMapNode} className="absolute inset-0" aria-label="Map of the FlexiGo service area" />
-          <div className="absolute left-3 top-3 rounded-lg border border-[#BFE5FF] bg-white/95 px-3 py-2 shadow-sm backdrop-blur sm:left-5 sm:top-5 sm:px-4 sm:py-3">
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#0B83E9] sm:text-xs">FlexiGo service area</p>
-            <p className="mt-0.5 text-xs font-medium text-[#355070] sm:mt-1 sm:text-sm">Connecticut airport transfers</p>
-          </div>
-        </aside>
-
-        <div className="dashboard-card-scroll -mx-4 min-h-0 w-[calc(100%+2rem)] flex-1 overflow-y-auto border-t border-[#D6ECFF] sm:-mx-6 sm:w-[calc(100%+3rem)] lg:col-start-1 lg:row-start-1 lg:mx-0 lg:h-full lg:w-auto lg:flex-none lg:overflow-visible lg:border-t-0">
-          <div className="dashboard-booking-card relative rounded-b-none border-x-0 border-b-0 bg-white p-4 shadow-[0_8px_24px_rgba(10,66,130,0.08)] sm:p-6 lg:rounded-t-[20px] lg:rounded-b-[20px] lg:rounded-l-[20px] lg:rounded-r-none lg:border lg:border-[#D6ECFF] lg:border-r-0 lg:p-4">
+        <div className="contents">
+        <div className="dashboard-card-scroll w-full lg:col-start-1 lg:row-start-1 lg:mx-0 lg:h-full lg:w-auto">
+          <div className="dashboard-booking-card relative rounded-2xl border border-[#D6ECFF] bg-white p-4 shadow-[0_8px_24px_rgba(10,66,130,0.08)] sm:p-6 lg:rounded-t-[20px] lg:rounded-b-[20px] lg:rounded-l-[20px] lg:rounded-r-none lg:border-r-0 lg:p-4">
             <p className="booking-intro text-xs font-semibold uppercase tracking-[0.22em] text-[#3A8EC6]">
               Connecticut booking
             </p>
@@ -1928,6 +1970,14 @@ export default function UserPage() {
             </div>
           </div>
         </div>
+
+        <aside className="dashboard-map-panel relative -mx-4 h-72 w-[calc(100%+2rem)] overflow-hidden rounded-2xl border border-[#BEE4FF] bg-[#EAF6FF] shadow-[0_8px_24px_rgba(10,66,130,0.08)] sm:-mx-6 sm:h-96 sm:w-[calc(100%+3rem)] lg:col-start-2 lg:row-start-1 lg:mx-0 lg:h-auto lg:w-auto lg:min-h-[calc(100vh-8.5rem)] lg:rounded-[20px] lg:rounded-l-none">
+          <div ref={setMapNode} className="absolute inset-0" aria-label="Map of the FlexiGo service area" />
+          <div className="absolute left-3 top-3 rounded-lg border border-[#BFE5FF] bg-white/95 px-3 py-2 shadow-sm backdrop-blur sm:left-5 sm:top-5 sm:px-4 sm:py-3">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#0B83E9] sm:text-xs">FlexiGo service area</p>
+            <p className="mt-0.5 text-xs font-medium text-[#355070] sm:mt-1 sm:text-sm">Connecticut airport transfers</p>
+          </div>
+        </aside>
         </div>
       </section>
 

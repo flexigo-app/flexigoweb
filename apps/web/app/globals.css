@@ -44,17 +44,6 @@ body {
   }
 }
 
-@media (max-width: 1023px) {
-  .user-dashboard-layout {
-    height: calc(100dvh - 4.5rem);
-    overflow: hidden;
-  }
-
-  .dashboard-card-scroll {
-    -webkit-overflow-scrolling: touch;
-  }
-}
-
 @media (min-width: 1024px) {
   .user-dashboard-layout {
     gap: 0;
