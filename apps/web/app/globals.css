@@ -44,6 +44,22 @@ body {
   }
 }
 
+@media print {
+  /* Print never scrolls, so IntersectionObserver-driven reveals never fire. */
+  [data-reveal] {
+    transition: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  /* Force gradient/background-colored elements (e.g. icon badges) to print
+     even when Chrome's "Background graphics" option is left unchecked. */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+
 @media (min-width: 1024px) {
   .user-dashboard-layout {
     gap: 0;
